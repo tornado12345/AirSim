@@ -30,30 +30,21 @@ public: //limited container interface
         members_.erase(std::remove(members_.begin(), members_.end(), obj), members_.end()); }
 
 public:
-    UpdatableContainer()
-    {
-        reset();
-    }
-    void setCurrentMembersAsInitial(bool reset_members = true)
-    {
-        initial_members_ = members_;
-        if (reset_members)
-            UpdatableContainer::reset();
-    }
-
     //*** Start: UpdatableState implementation ***//
     virtual void reset() override
     {
-        members_ = initial_members_;
+        UpdatableObject::reset();
 
         for (TUpdatableObjectPtr& member : members_)
             member->reset();
     }
 
-    virtual void update(real_T dt) override
+    virtual void update() override
     {
+        UpdatableObject::update();
+
         for (TUpdatableObjectPtr& member : members_)
-            member->update(dt);
+            member->update();
     }
 
     virtual void reportState(StateReporter& reporter) override
@@ -67,7 +58,7 @@ public:
     virtual ~UpdatableContainer() = default;
 
 private:
-    MembersContainer members_, initial_members_;
+    MembersContainer members_;
 };
 
 }} //namespace

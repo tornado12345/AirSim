@@ -54,6 +54,8 @@ public:
     //TODO: need better line end handling
     void startHeading(string heading, uint heading_size, uint columns = 20)
     {
+        unused(heading_size);
+        unused(columns);
         ss_ << "\n";
         ss_ << heading;
     }
@@ -82,10 +84,9 @@ public:
         real_T pitch, roll, yaw;
         VectorMath::toEulerianAngle(quat, pitch, roll, yaw);
 
-        ss_ << name << ": " <<
-            "(" << roll << ", " << pitch << ", " << yaw << ") -" <<
-            " [" << quat.w() << ", " <<
-            quat.x() << ", " << quat.y() << ", " << quat.z()  << "]\n";
+        ss_ << name << ":\n" <<
+            "    euler: (" << roll << ", " << pitch << ", " << yaw << ")\n" <<
+            "    quat: [" << quat.w() << ", " << quat.x() << ", " << quat.y() << ", " << quat.z()  << "]\n";
     }
 
     //write APIs - generic values

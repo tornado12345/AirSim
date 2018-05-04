@@ -1,5 +1,8 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<Project DefaultTargets="Build" ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <ShowAllFiles>true</ShowAllFiles>
+  </PropertyGroup>
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
       <Configuration>Debug</Configuration>
@@ -19,13 +22,26 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="include\api\ApiServerBase.hpp" />
+    <ClInclude Include="include\api\DebugApiServer.hpp" />
+    <ClInclude Include="include\api\RpcLibAdapatorsBase.hpp" />
+    <ClInclude Include="include\api\RpcLibClientBase.hpp" />
+    <ClInclude Include="include\api\RpcLibServerBase.hpp" />
+    <ClInclude Include="include\api\SimModeApiBase.hpp" />
+    <ClInclude Include="include\api\VehicleApiBase.hpp" />
+    <ClInclude Include="include\api\WorldApiBase.hpp" />
+    <ClInclude Include="include\common\AirSimSettings.hpp" />
+    <ClInclude Include="include\common\ClockBase.hpp" />
     <ClInclude Include="include\common\Common.hpp" />
     <ClInclude Include="include\common\CommonStructs.hpp" />
+    <ClInclude Include="include\common\ClockFactory.hpp" />
     <ClInclude Include="include\common\common_utils\ctpl_stl.h" />
     <ClInclude Include="include\common\common_utils\EnumFlags.hpp" />
     <ClInclude Include="include\common\common_utils\ExceptionUtils.hpp" />
+    <ClInclude Include="include\common\common_utils\FileSystem.hpp" />
     <ClInclude Include="include\common\common_utils\json.hpp" />
     <ClInclude Include="include\common\common_utils\MedianFilter.hpp" />
+    <ClInclude Include="include\common\common_utils\MinWinDefines.hpp" />
     <ClInclude Include="include\common\common_utils\OnlineStats.hpp" />
     <ClInclude Include="include\common\common_utils\optional.hpp" />
     <ClInclude Include="include\common\common_utils\prettyprint.hpp" />
@@ -33,8 +49,13 @@
     <ClInclude Include="include\common\common_utils\RandomGenerator.hpp" />
     <ClInclude Include="include\common\common_utils\ScheduledExecutor.hpp" />
     <ClInclude Include="include\common\common_utils\sincos.hpp" />
+    <ClInclude Include="include\common\common_utils\StrictMode.hpp" />
+    <ClInclude Include="include\common\common_utils\Timer.hpp" />
     <ClInclude Include="include\common\common_utils\type_utils.hpp" />
     <ClInclude Include="include\common\common_utils\Utils.hpp" />
+    <ClInclude Include="include\common\common_utils\WorkerThread.hpp" />
+    <ClInclude Include="include\common\EarthCelestial.hpp" />
+    <ClInclude Include="include\common\SteppableClock.hpp" />
     <ClInclude Include="include\common\DelayLine.hpp" />
     <ClInclude Include="include\common\EarthUtils.hpp" />
     <ClInclude Include="include\common\FirstOrderFilter.hpp" />
@@ -42,29 +63,95 @@
     <ClInclude Include="include\common\GaussianMarkov.hpp" />
     <ClInclude Include="include\common\GeodeticConverter.hpp" />
     <ClInclude Include="include\common\LogFileWriter.hpp" />
+    <ClInclude Include="include\common\ScalableClock.hpp" />
     <ClInclude Include="include\common\StateReporter.hpp" />
     <ClInclude Include="include\common\StateReporterWrapper.hpp" />
     <ClInclude Include="include\common\UpdatableContainer.hpp" />
     <ClInclude Include="include\common\UpdatableObject.hpp" />
     <ClInclude Include="include\common\VectorMath.hpp" />
     <ClInclude Include="include\common\common_utils\AsyncTasker.hpp" />
-    <ClInclude Include="include\control\ControlServerBase.hpp" />
-    <ClInclude Include="include\control\CubeGeoFence.hpp" />
-    <ClInclude Include="include\control\DroneControlBase.hpp" />
-    <ClInclude Include="include\control\DroneControlCommon.hpp" />
-    <ClInclude Include="include\control\IGeoFence.hpp" />
-    <ClInclude Include="include\control\MavLinkDroneControl.hpp" />
-    <ClInclude Include="include\control\MavLinkHelper.h" />
-    <ClInclude Include="include\control\ObstacleMap.hpp" />
-    <ClInclude Include="include\control\PidController.hpp" />
-    <ClInclude Include="include\control\RpcLibAdapators.hpp" />
-    <ClInclude Include="include\control\RpcLibClient.hpp" />
-    <ClInclude Include="include\control\RpcLibServer.hpp" />
-    <ClInclude Include="include\control\SafetyEval.hpp" />
-    <ClInclude Include="include\control\DroneControlServer.hpp" />
-    <ClInclude Include="include\control\Settings.h" />
-    <ClInclude Include="include\control\SphereGeoFence.hpp" />
-    <ClInclude Include="include\control\Waiter.hpp" />
+    <ClInclude Include="include\common\ImageCaptureBase.hpp" />
+    <ClInclude Include="include\controllers\VehicleConnectorBase.hpp" />
+    <ClInclude Include="include\sensors\SensorFactory.hpp" />
+    <ClInclude Include="include\vehicles\car\api\CarApiBase.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\api\MultirotorRpcLibAdapators.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\api\MultirotorRpcLibClient.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\api\MultirotorRpcLibServer.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\controllers\RealMultirotorConnector.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\ros_flight\AirSimRosFlightBoard.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\ros_flight\AirSimRosFlightCommLink.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\ros_flight\firmware\board.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\ros_flight\firmware\commlink.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\ros_flight\firmware\commonstate.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\ros_flight\firmware\controller.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\ros_flight\firmware\dummyboard.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\ros_flight\firmware\dummycommlink.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\ros_flight\firmware\estimator.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\ros_flight\firmware\firmware.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\ros_flight\firmware\mixer.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\ros_flight\firmware\mode.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\ros_flight\firmware\mux.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\ros_flight\firmware\param.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\ros_flight\firmware\rc.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\ros_flight\firmware\sensors.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\ros_flight\firmware\turbotrig\turbotrig.h" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\ros_flight\firmware\turbotrig\turbovec.h" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\ros_flight\RosFlightDroneController.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\simple_flight\AirSimSimpleFlightBoard.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\simple_flight\AirSimSimpleFlightCommLink.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\simple_flight\AirSimSimpleFlightEstimator.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\simple_flight\AirSimSimpleFlightCommon.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\simple_flight\firmware\AdaptiveController.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\simple_flight\firmware\AngleLevelController.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\simple_flight\firmware\AngleRateController.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\simple_flight\firmware\CascadeController.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\simple_flight\firmware\ConstantOutputController.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\simple_flight\firmware\interfaces\IPidIntegrator.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\simple_flight\firmware\OffboardApi.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\simple_flight\firmware\Firmware.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\simple_flight\firmware\interfaces\CommonStructs.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\simple_flight\firmware\interfaces\IAxisController.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\simple_flight\firmware\interfaces\IBoard.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\simple_flight\firmware\interfaces\IBoardClock.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\simple_flight\firmware\interfaces\IBoardInputPins.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\simple_flight\firmware\interfaces\IBoardOutputPins.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\simple_flight\firmware\interfaces\IBoardSensors.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\simple_flight\firmware\interfaces\ICommLink.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\simple_flight\firmware\interfaces\IController.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\simple_flight\firmware\interfaces\IFirmware.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\simple_flight\firmware\interfaces\IGoal.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\simple_flight\firmware\interfaces\IOffboardApi.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\simple_flight\firmware\interfaces\IStateEstimator.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\simple_flight\firmware\interfaces\IUpdatable.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\simple_flight\firmware\Mixer.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\simple_flight\firmware\Params.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\simple_flight\firmware\PassthroughController.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\simple_flight\firmware\PidController.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\simple_flight\firmware\PositionController.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\simple_flight\firmware\RemoteControl.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\simple_flight\firmware\RungKuttaPidIntegrator.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\simple_flight\firmware\StdPidIntegrator.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\simple_flight\firmware\VelocityController.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\firmwares\simple_flight\SimpleFlightDroneController.hpp" />
+    <ClInclude Include="include\physics\DebugPhysicsBody.hpp" />
+    <ClInclude Include="include\physics\PhysicsBodyWorld.hpp" />
+    <ClInclude Include="include\physics\PhysicsWorld.hpp" />
+    <ClInclude Include="include\safety\CubeGeoFence.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\controllers\DroneCommon.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\controllers\DroneControllerBase.hpp" />
+    <ClInclude Include="include\safety\IGeoFence.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\controllers\MavLinkDroneController.hpp" />
+    <ClInclude Include="include\safety\ObstacleMap.hpp" />
+    <ClInclude Include="include\controllers\PidController.hpp" />
+    <ClInclude Include="include\vehicles\car\api\CarRpcLibAdapators.hpp" />
+    <ClInclude Include="include\vehicles\car\api\CarRpcLibClient.hpp" />
+    <ClInclude Include="include\vehicles\car\api\CarRpcLibServer.hpp" />
+    <ClInclude Include="include\safety\SafetyEval.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\api\MultirotorApi.hpp" />
+    <ClInclude Include="include\common\Settings.hpp" />
+    <ClInclude Include="include\safety\SphereGeoFence.hpp" />
+    <ClInclude Include="include\controllers\VehicleControllerBase.hpp" />
+    <ClInclude Include="include\common\Waiter.hpp" />
     <ClInclude Include="include\physics\Environment.hpp" />
     <ClInclude Include="include\physics\FastPhysicsEngine.hpp" />
     <ClInclude Include="include\physics\Kinematics.hpp" />
@@ -85,27 +172,28 @@
     <ClInclude Include="include\sensors\magnetometer\MagnetometerSimple.hpp" />
     <ClInclude Include="include\sensors\magnetometer\MagnetometerSimpleParams.hpp" />
     <ClInclude Include="include\sensors\SensorBase.hpp" />
-    <ClInclude Include="include\vehicles\configs\Firefly.hpp" />
-    <ClInclude Include="include\vehicles\configs\Px4QuadX.hpp" />
-    <ClInclude Include="include\vehicles\controllers\ControllerBase.hpp" />
-    <ClInclude Include="include\vehicles\controllers\MotorDirectController.hpp" />
-    <ClInclude Include="include\vehicles\controllers\MotorDirectControllerParams.hpp" />
-    <ClInclude Include="include\vehicles\controllers\RpyDirectController.hpp" />
-    <ClInclude Include="include\vehicles\controllers\RpyDirectControllerParams.hpp" />
-    <ClInclude Include="include\vehicles\MultiRotor.hpp" />
-    <ClInclude Include="include\vehicles\MultiRotorParams.hpp" />
-    <ClInclude Include="include\vehicles\Rotor.hpp" />
-    <ClInclude Include="include\vehicles\RotorParams.hpp" />
+    <ClInclude Include="include\sensors\SensorCollection.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\configs\Px4MultiRotor.hpp" />
+    <ClInclude Include="include\controllers\ControllerBase.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\configs\RosFlightQuadX.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\configs\SimpleFlightQuadX.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\MultiRotor.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\MultiRotorParams.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\MultiRotorParamsFactory.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\Rotor.hpp" />
+    <ClInclude Include="include\vehicles\multirotor\RotorParams.hpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="src\control\DroneControlBase.cpp" />
-    <ClCompile Include="src\control\MavLinkDroneControl.cpp" />
-    <ClCompile Include="src\control\MavLinkHelper.cpp" />
-    <ClCompile Include="src\control\ObstacleMap.cpp" />
-    <ClCompile Include="src\control\RpcLibClient.cpp" />
-    <ClCompile Include="src\control\RpcLibServer.cpp" />
-    <ClCompile Include="src\control\SafetyEval.cpp" />
-    <ClCompile Include="src\control\Settings.cpp" />
+    <ClCompile Include="src\api\RpcLibClientBase.cpp" />
+    <ClCompile Include="src\api\RpcLibServerBase.cpp" />
+    <ClCompile Include="src\vehicles\multirotor\controllers\DroneControllerBase.cpp" />
+    <ClCompile Include="src\safety\ObstacleMap.cpp" />
+    <ClCompile Include="src\safety\SafetyEval.cpp" />
+    <ClCompile Include="src\common\common_utils\FileSystem.cpp" />
+    <ClCompile Include="src\vehicles\car\api\CarRpcLibClient.cpp" />
+    <ClCompile Include="src\vehicles\car\api\CarRpcLibServer.cpp" />
+    <ClCompile Include="src\vehicles\multirotor\api\MultirotorRpcLibClient.cpp" />
+    <ClCompile Include="src\vehicles\multirotor\api\MultirotorRpcLibServer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\MavLinkCom\MavLinkCom.vcxproj">
@@ -122,26 +210,26 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v140</PlatformToolset>
+    <PlatformToolset>v141</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v140</PlatformToolset>
+    <PlatformToolset>v141</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v140</PlatformToolset>
+    <PlatformToolset>v141</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v140</PlatformToolset>
+    <PlatformToolset>v141</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
@@ -187,10 +275,10 @@
     <ClCompile>
       <PrecompiledHeader>
       </PrecompiledHeader>
-      <WarningLevel>Level3</WarningLevel>
+      <WarningLevel>Level4</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>include;$(EIGEN_ROOT)\Eigen3;$(BOOST_ROOT);deps\rpclib\include;..\MavLinkCom\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>include;deps\eigen3;deps\rpclib\include;$(ProjectDir)..\MavLinkCom\include</AdditionalIncludeDirectories>
       <TreatWarningAsError>true</TreatWarningAsError>
       <AdditionalOptions>/w34263 /w34266 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
@@ -204,7 +292,7 @@
       <AdditionalDependencies>rpc.lib</AdditionalDependencies>
     </Lib>
     <Lib>
-      <AdditionalLibraryDirectories>deps\rpclib\lib\$(Platform)\$(Configuration);$(BOOST_ROOT)\stage\lib</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>deps\rpclib\lib\$(Platform)\$(Configuration)</AdditionalLibraryDirectories>
     </Lib>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -214,7 +302,7 @@
       <WarningLevel>Level4</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>_SCL_SECURE_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>include;$(EIGEN_ROOT)\Eigen3;$(BOOST_ROOT);deps\rpclib\include;..\MavLinkCom\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>include;deps\eigen3;deps\rpclib\include;$(ProjectDir)..\MavLinkCom\include</AdditionalIncludeDirectories>
       <TreatWarningAsError>true</TreatWarningAsError>
       <AdditionalOptions>/w34263 /w34266 %(AdditionalOptions)</AdditionalOptions>
       <DisableSpecificWarnings>4100;4505;4820;4464;4514;4710;4571;%(DisableSpecificWarnings)</DisableSpecificWarnings>
@@ -229,19 +317,19 @@
       <AdditionalDependencies>rpc.lib</AdditionalDependencies>
     </Lib>
     <Lib>
-      <AdditionalLibraryDirectories>deps\rpclib\lib\$(Platform)\$(Configuration);$(BOOST_ROOT)\stage\lib</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>deps\rpclib\lib\$(Platform)\$(Configuration)</AdditionalLibraryDirectories>
     </Lib>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
-      <WarningLevel>Level3</WarningLevel>
+      <WarningLevel>Level4</WarningLevel>
       <PrecompiledHeader>
       </PrecompiledHeader>
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>WIN32;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>include;$(EIGEN_ROOT)\Eigen3;$(BOOST_ROOT);deps\rpclib\include;..\MavLinkCom\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>include;deps\eigen3;deps\rpclib\include;$(ProjectDir)..\MavLinkCom\include</AdditionalIncludeDirectories>
       <TreatWarningAsError>true</TreatWarningAsError>
       <AdditionalOptions>/w34263 /w34266 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
@@ -257,19 +345,19 @@
       <AdditionalDependencies>rpc.lib</AdditionalDependencies>
     </Lib>
     <Lib>
-      <AdditionalLibraryDirectories>deps\rpclib\lib\$(Platform)\$(Configuration);$(BOOST_ROOT)\stage\lib</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>deps\rpclib\lib\$(Platform)\$(Configuration)</AdditionalLibraryDirectories>
     </Lib>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
-      <WarningLevel>Level3</WarningLevel>
+      <WarningLevel>Level4</WarningLevel>
       <PrecompiledHeader>
       </PrecompiledHeader>
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>NDEBUG;_SCL_SECURE_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>include;$(EIGEN_ROOT)\Eigen3;$(BOOST_ROOT);deps\rpclib\include;..\MavLinkCom\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>include;deps\eigen3;deps\rpclib\include;$(ProjectDir)..\MavLinkCom\include</AdditionalIncludeDirectories>
       <TreatWarningAsError>true</TreatWarningAsError>
       <AdditionalOptions>/w34263 /w34266 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
@@ -285,7 +373,7 @@
       <AdditionalDependencies>rpc.lib</AdditionalDependencies>
     </Lib>
     <Lib>
-      <AdditionalLibraryDirectories>deps\rpclib\lib\$(Platform)\$(Configuration);$(BOOST_ROOT)\stage\lib</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>deps\rpclib\lib\$(Platform)\$(Configuration)</AdditionalLibraryDirectories>
     </Lib>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

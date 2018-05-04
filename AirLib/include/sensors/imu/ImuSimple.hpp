@@ -2,8 +2,8 @@
 // Licensed under the MIT License.
 
 
-#ifndef msr_air_copter_sim_SimpleImu_hpp
-#define msr_air_copter_sim_SimpleImu_hpp
+#ifndef msr_airlib_SimpleImu_hpp
+#define msr_airlib_SimpleImu_hpp
 
 #include "common/Common.hpp"
 #include "ImuSimpleParams.hpp"
@@ -14,43 +14,38 @@ namespace msr { namespace airlib {
 class ImuSimple : public ImuBase {
 public:
     //constructors
-    ImuSimple()
+    ImuSimple(const ImuSimpleParams& params = ImuSimpleParams())
+        : params_(params)
     {
-        ImuSimple::reset();
-    }
-    ImuSimple(GroundTruth* ground_truth)
-    {
-        initialize(ground_truth);
-    }
-    void initialize(GroundTruth* ground_truth)
-    {
-        ImuBase::initialize(ground_truth);
-
         gyro_bias_stability_norm = params_.gyro.bias_stability / sqrt(params_.gyro.tau);
         accel_bias_stability_norm = params_.accel.bias_stability / sqrt(params_.accel.tau);
-
-        ImuSimple::reset();
     }
 
     //*** Start: UpdatableState implementation ***//
     virtual void reset() override
     {
+        ImuBase::reset();
+
+        last_time_ = clock()->nowNanos();
+
         state_.gyroscope_bias = params_.gyro.turn_on_bias;
         state_.accelerometer_bias = params_.accel.turn_on_bias;
         gauss_dist.reset();
-        updateOutput(0);
+        updateOutput();
     }
 
-    virtual void update(real_T dt) override
+    virtual void update() override
     {
-        updateOutput(dt);
+        ImuBase::update();
+
+        updateOutput();
     }
     //*** End: UpdatableState implementation ***//
 
     virtual ~ImuSimple() = default;
 
 private: //methods
-    void updateOutput(real_T dt)
+    void updateOutput()
     {
         Output output;
         const GroundTruth& ground_truth = getGroundTruth();
@@ -64,18 +59,20 @@ private: //methods
             ground_truth.kinematics->pose.orientation, true);
 
         //add noise
-        addNoise(output.linear_acceleration, output.angular_velocity, dt);
+        addNoise(output.linear_acceleration, output.angular_velocity);
         // TODO: Add noise in orientation?
 
         setOutput(output);
     }
 
-    void addNoise(Vector3r& linear_acceleration, Vector3r& angular_velocity, float dt)
+    void addNoise(Vector3r& linear_acceleration, Vector3r& angular_velocity)
     {
+        TTimeDelta dt = clock()->updateSince(last_time_);
+
         //ref: An introduction to inertial navigation, Oliver J. Woodman, Sec 3.2, pp 10-12
         //https://www.cl.cam.ac.uk/techreports/UCAM-CL-TR-696.pdf
 
-        real_T sqrt_dt = sqrt(std::max(dt, params_.min_sample_time));
+        real_T sqrt_dt = static_cast<real_T>(sqrt(std::max<TTimeDelta>(dt, params_.min_sample_time)));
 
         // Gyrosocpe
         //convert arw to stddev
@@ -106,6 +103,8 @@ private: //fields
         Vector3r gyroscope_bias;
         Vector3r accelerometer_bias;
     } state_;
+
+    TTimePoint last_time_;
 };
 
 

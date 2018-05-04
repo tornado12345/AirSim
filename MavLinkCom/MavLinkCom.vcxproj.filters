@@ -22,23 +22,11 @@
     <ClCompile Include="src\impl\MavLinkVideoStreamImpl.cpp">
       <Filter>src\impl</Filter>
     </ClCompile>
-    <ClCompile Include="src\serial_com\SerialPort.cpp">
-      <Filter>serial_com</Filter>
-    </ClCompile>
     <ClCompile Include="src\serial_com\TcpClientPort.cpp">
-      <Filter>serial_com</Filter>
-    </ClCompile>
-    <ClCompile Include="src\serial_com\TcpServer.cpp">
       <Filter>serial_com</Filter>
     </ClCompile>
     <ClCompile Include="src\serial_com\UdpClientPort.cpp">
       <Filter>serial_com</Filter>
-    </ClCompile>
-    <ClCompile Include="src\serial_com\UdpServer.cpp">
-      <Filter>serial_com</Filter>
-    </ClCompile>
-    <ClCompile Include="src\impl\windows\MavLinkFindSerialPorts.cpp">
-      <Filter>src\impl\windows</Filter>
     </ClCompile>
     <ClCompile Include="src\MavLinkFtpClient.cpp">
       <Filter>src</Filter>
@@ -55,9 +43,6 @@
     <ClCompile Include="src\MavLinkNode.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="src\MavLinkSemaphore.cpp">
-      <Filter>src</Filter>
-    </ClCompile>
     <ClCompile Include="src\MavLinkTcpServer.cpp">
       <Filter>src</Filter>
     </ClCompile>
@@ -66,6 +51,30 @@
     </ClCompile>
     <ClCompile Include="src\MavLinkVideoStream.cpp">
       <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="common_utils\ThreadUtils.cpp">
+      <Filter>common_utils</Filter>
+    </ClCompile>
+    <ClCompile Include="common_utils\FileSystem.cpp">
+      <Filter>common_utils</Filter>
+    </ClCompile>
+    <ClCompile Include="src\serial_com\SerialPort.cpp">
+      <Filter>serial_com</Filter>
+    </ClCompile>
+    <ClCompile Include="src\serial_com\SocketInit.cpp">
+      <Filter>serial_com</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Semaphore.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\serial_com\wifi.cpp">
+      <Filter>serial_com</Filter>
+    </ClCompile>
+    <ClCompile Include="src\impl\onecore\OneCoreFindSerialPorts.cpp">
+      <Filter>src\impl\onecore</Filter>
+    </ClCompile>
+    <ClCompile Include="src\impl\windows\WindowsFindSerialPorts.cpp">
+      <Filter>src\impl\windows</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -126,9 +135,6 @@
     <ClInclude Include="include\MavLinkFtpClient.hpp">
       <Filter>include</Filter>
     </ClInclude>
-    <ClInclude Include="src\impl\MavLinkFtpClientImpl.hpp">
-      <Filter>include</Filter>
-    </ClInclude>
     <ClInclude Include="include\MavLinkLog.hpp">
       <Filter>include</Filter>
     </ClInclude>
@@ -139,9 +145,6 @@
       <Filter>include</Filter>
     </ClInclude>
     <ClInclude Include="include\MavLinkNode.hpp">
-      <Filter>include</Filter>
-    </ClInclude>
-    <ClInclude Include="include\MavLinkSemaphore.hpp">
       <Filter>include</Filter>
     </ClInclude>
     <ClInclude Include="include\MavLinkTcpServer.hpp">
@@ -177,20 +180,38 @@
     <ClInclude Include="src\serial_com\Port.h">
       <Filter>serial_com</Filter>
     </ClInclude>
-    <ClInclude Include="src\serial_com\SerialPort.hpp">
-      <Filter>serial_com</Filter>
-    </ClInclude>
     <ClInclude Include="src\serial_com\TcpClientPort.hpp">
-      <Filter>serial_com</Filter>
-    </ClInclude>
-    <ClInclude Include="src\serial_com\TcpServer.hpp">
       <Filter>serial_com</Filter>
     </ClInclude>
     <ClInclude Include="src\serial_com\UdpClientPort.hpp">
       <Filter>serial_com</Filter>
     </ClInclude>
-    <ClInclude Include="src\serial_com\UdpServer.hpp">
+    <ClInclude Include="common_utils\StrictMode.hpp">
+      <Filter>common_utils</Filter>
+    </ClInclude>
+    <ClInclude Include="common_utils\ThreadUtils.hpp">
+      <Filter>common_utils</Filter>
+    </ClInclude>
+    <ClInclude Include="common_utils\FileSystem.hpp">
+      <Filter>common_utils</Filter>
+    </ClInclude>
+    <ClInclude Include="src\serial_com\SerialPort.hpp">
       <Filter>serial_com</Filter>
+    </ClInclude>
+    <ClInclude Include="src\serial_com\SocketInit.hpp">
+      <Filter>serial_com</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Semaphore.hpp">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="src\serial_com\wifi.h">
+      <Filter>serial_com</Filter>
+    </ClInclude>
+    <ClInclude Include="common_utils\json.hpp">
+      <Filter>common_utils</Filter>
+    </ClInclude>
+    <ClInclude Include="src\impl\MavLinkFtpClientImpl.hpp">
+      <Filter>src\impl</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -219,6 +240,9 @@
     </Filter>
     <Filter Include="src\impl\windows">
       <UniqueIdentifier>{4ee25053-206a-4174-99cb-5fb278fc5079}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\impl\onecore">
+      <UniqueIdentifier>{7b6dab75-eedb-4b36-a3a3-ea8c30b4a412}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>

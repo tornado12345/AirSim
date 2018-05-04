@@ -10,7 +10,7 @@
 #include <atomic>
 #include <system_error>
 #include <mutex>
-
+#include <cstdint>
 
 namespace common_utils {
 
@@ -18,76 +18,78 @@ class ScheduledExecutor {
 public:
     ScheduledExecutor()
     {}
-    ScheduledExecutor(const std::function<bool(double)>& callback, double period)
+    ScheduledExecutor(const std::function<bool(uint64_t)>& callback, uint64_t period_nanos)
     {
-        initialize(callback, period);
+        initialize(callback, period_nanos);
     }
     ~ScheduledExecutor()
     {
         stop();
     }
-    void initialize(const std::function<bool(double)>& callback, double period)
+    void initialize(const std::function<bool(uint64_t)>& callback, uint64_t period_nanos)
     {
         callback_ = callback;
-        period_ = period;
-        keep_running_ = false;
+        period_nanos_ = period_nanos;
+        started_ = false;
+
     }
 
     void start()
     {
-        keep_running_ = true;
+        started_ = true;
+        is_first_period_ = true;
+
+        initializePauseState();
+        
         sleep_time_avg_ = 0;
-        period_count_ = 0;
+        Utils::cleanupThread(th_);
         th_ = std::thread(&ScheduledExecutor::executorLoop, this);
+    }
+
+    void pause(bool is_paused)
+    {
+        paused_ = is_paused;
+    }
+
+    bool isPaused() const
+    {
+        return paused_;
+    }
+
+    void continueForTime(double seconds)
+    {
+        pause_period_start_ = nanos();
+        pause_period_ = static_cast<TTimeDelta>(1E9 * seconds);
+        paused_ = false;
     }
 
     void stop()
     {
-        if (keep_running_) {
-            keep_running_ = false;
+        if (started_) {
+            started_ = false;
+            initializePauseState();
+
             try {
-				if (th_.joinable()) {
-					th_.join();
-				}
+                if (th_.joinable()) {
+                    th_.join();
+                }
             }
             catch(const std::system_error& /* e */)
             { }
         }
     }
 
-    bool isRunning()
+    bool isRunning() const
     {
-        return keep_running_;
+        return started_ && !paused_;
     }
 
-    double getSleepTimeAvg()
+    double getSleepTimeAvg() const
     {
         //TODO: make this function thread safe by using atomic types
         //right now this is not implemented for performance and that
         //return of this function is purely informational/debugging purposes
         return sleep_time_avg_;
-    }
-
-    static void sleep_for(double dt)
-    {
-        /*
-            This is spin loop implementation which may be suitable for sub-millisecond resolution.
-            //TODO: investigate below alternatives
-            On Windows we can use multimedia timers however this requires including entire Win32 header.
-            On Linux we can use nanosleep however below 2ms delays in real-time scheduler settings this 
-                probbaly does spin loop anyway.
-            
-        */
-        static constexpr duration<double> MinSleepDuration(0);
-        clock::time_point start = clock::now();
-        while (duration<double>(clock::now() - start).count() < dt) {
-            std::this_thread::sleep_for(MinSleepDuration);
-        }
-    }
-
-    unsigned long getPeriodCount()
-    {
-        return period_count_;
     }
 
     void lock()
@@ -100,52 +102,102 @@ public:
     }
 
 private:
+    void initializePauseState()
+    {
+        paused_ = false;
+        pause_period_start_ = 0;
+        pause_period_ = 0;
+    }
+
+private:
     typedef std::chrono::high_resolution_clock clock;
+    typedef uint64_t TTimePoint;
+    typedef uint64_t TTimeDelta;
     template <typename T>
     using duration = std::chrono::duration<T>;
 
-    void executorLoop()
+    static TTimePoint nanos()
     {
-        clock::time_point call_end = clock::now();
-        while (keep_running_) {
-            clock::time_point period_start = clock::now();
-            duration<double> since_last_call = period_start - call_end;
-            
-            if (period_count_ > 0) {
-                bool result = callback_(since_last_call.count());
-				if (!result) {
-					keep_running_ = result;
-				}
-            }
-            
-            call_end = clock::now();
+        return clock::now().time_since_epoch().count();
+    }
 
-            //after running callback, try to get lock which might cause wait
-            {
-                //TODO: add ability to disable use of mutex
-                std::lock_guard<std::mutex> locker(mutex_);
+    static void sleep_for(TTimePoint delay_nanos)
+    {
+        /*
+        This is spin loop implementation which may be suitable for sub-millisecond resolution.
+        //TODO: investigate below alternatives
+        On Windows we can use multimedia timers however this requires including entire Win32 header.
+        On Linux we can use nanosleep however below 2ms delays in real-time scheduler settings this 
+        probbaly does spin loop anyway.
 
-                duration<double> elapsed_period = clock::now() - period_start;
-                double sleep_dt = period_ - elapsed_period.count();
-                sleep_time_avg_ = 0.25f * sleep_time_avg_ + 0.75f * sleep_dt;
-                ++period_count_;
-                if (sleep_dt > MinSleepTime && keep_running_)
-                    sleep_for(sleep_dt);
-                    //std::this_thread::sleep_for(std::chrono::duration<double>(sleep_dt));
+        */
+
+        if (delay_nanos >= 5000000LL) { //put thread to sleep
+            std::this_thread::sleep_for(std::chrono::duration<double>(delay_nanos / 1.0E9));
+        }
+        else { //for more precise timing, do spinning
+            auto start = nanos();
+            while ((nanos() - start) < delay_nanos) {
+                std::this_thread::yield();
+                //std::this_thread::sleep_for(std::chrono::duration<double>(0));
             }
         }
     }
 
-private:
-    double period_;
-    std::thread th_;
-    std::function<bool(double)> callback_;
-    std::atomic_bool keep_running_;
-    
-    static constexpr double MinSleepTime = 1E-6;
+    void executorLoop()
+    {
+        TTimePoint call_end = nanos();
+        while (started_) {
+            TTimePoint period_start = nanos();
+            TTimeDelta since_last_call = period_start - call_end;
+            
+            if (pause_period_start_ > 0) {
+                if (nanos() - pause_period_start_ >= pause_period_) {
+                    if (! isPaused())
+                        pause(true);
 
+                    pause_period_start_ = 0;
+                }
+            }
+
+            //is this first loop?
+            if (!is_first_period_) {
+                if (!paused_) {
+                    //when we are doing work, don't let other thread to cause contention
+                    std::lock_guard<std::mutex> locker(mutex_);
+
+                    bool result = callback_(since_last_call);
+                    if (!result) {
+                        started_ = result;
+                    }
+                }
+            } 
+            else
+                is_first_period_ = false;
+            
+            call_end = nanos();
+
+            TTimeDelta elapsed_period = nanos() - period_start;
+            //prevent underflow: https://github.com/Microsoft/AirSim/issues/617
+            TTimeDelta delay_nanos = period_nanos_ > elapsed_period ? period_nanos_ - elapsed_period : 0;
+            //moving average of how much we are sleeping
+            sleep_time_avg_ = 0.25f * sleep_time_avg_ + 0.75f * delay_nanos;
+            if (delay_nanos > 0 && started_)
+                sleep_for(delay_nanos);
+        }
+    }
+
+private:
+    uint64_t period_nanos_;
+    std::thread th_;
+    std::function<bool(uint64_t)> callback_;
+    bool is_first_period_;
+    std::atomic_bool started_;
+    std::atomic_bool paused_;
+    std::atomic<TTimeDelta> pause_period_;
+    std::atomic<TTimePoint> pause_period_start_;
+    
     double sleep_time_avg_;
-    unsigned long period_count_;
 
     std::mutex mutex_;
 };

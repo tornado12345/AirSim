@@ -10,28 +10,19 @@
 #include "PhysicsEngineBase.hpp"
 #include "PhysicsBody.hpp"
 #include "common/common_utils/ScheduledExecutor.hpp"
+#include "common/ClockFactory.hpp"
 
 namespace msr { namespace airlib {
 
 class World : public UpdatableContainer<UpdatableObject*> {
 public:
-    World()
-    { 
-        initialize(nullptr);
-    }
     World(PhysicsEngineBase* physics_engine)
-    {
-        initialize(physics_engine);
-    }
-    void initialize(PhysicsEngineBase* physics_engine)
-    {
+    { 
         World::clear();
 
-        if (physics_engine) {
-            physics_engine_ = physics_engine;
+        physics_engine_ = physics_engine;
+        if (physics_engine)
             physics_engine_->clear();
-        }
-        World::reset();
     }
 
     //override updatable interface so we can synchronize physics engine
@@ -44,14 +35,16 @@ public:
             physics_engine_->reset();
     }
 
-    virtual void update(real_T dt) override
+    virtual void update() override
     {
+        ClockFactory::get()->step();
+
         //first update our objects
-        UpdatableContainer::update(dt);
+        UpdatableContainer::update();
 
         //now update kinematics state
         if (physics_engine_)
-            physics_engine_->update(dt);
+            physics_engine_->update();
     }
 
     virtual void reportState(StateReporter& reporter) override
@@ -73,7 +66,7 @@ public:
         UpdatableContainer::clear();
     }
 
-    virtual void insert(UpdatableObject* member) 
+    virtual void insert(UpdatableObject* member) override
     { 
         if (physics_engine_ && member->getPhysicsBody() != nullptr)
             physics_engine_->insert(static_cast<PhysicsBody*>(member->getPhysicsBody()));
@@ -81,17 +74,19 @@ public:
         UpdatableContainer::insert(member);
     }
 
-    virtual void erase_remove(UpdatableObject* member) 
+    virtual void erase_remove(UpdatableObject* member) override
     { 
         if (physics_engine_ && member->getPhysicsBody() != nullptr)
-            physics_engine_->erase_remove(static_cast<PhysicsBody*>(member));
+            physics_engine_->erase_remove(static_cast<PhysicsBody*>(
+                member->getPhysicsBody()));
 
         UpdatableContainer::erase_remove(member);
     }
 
     //async updater thread
-    void startAsyncUpdator(real_T period)
+    void startAsyncUpdator(uint64_t period)
     {
+        //TODO: probably we shouldn't be passing around fixed period
         executor_.initialize(std::bind(&World::worldUpdatorAsync, this, std::placeholders::_1), period);
         executor_.start();
     }
@@ -108,24 +103,48 @@ public:
         executor_.unlock();
     }
 
-private:
-    bool worldUpdatorAsync(double dt)
+    virtual ~World()
     {
+        executor_.stop();
+    }
+
+    void pause(bool is_paused)
+    {
+        executor_.pause(is_paused);
+    }
+
+    bool isPaused() const
+    {
+        return executor_.isPaused();
+    }
+
+    void continueForTime(double seconds)
+    {
+        executor_.continueForTime(seconds);
+    }
+
+private:
+    bool worldUpdatorAsync(uint64_t dt_nanos)
+    {
+        unused(dt_nanos);
+
         try {
-            update(static_cast<real_T>(dt));
+            update();
         }
         catch(const std::exception& ex) {
-            Utils::logError("Exception occured while updating world: %s", ex.what());
+            //Utils::DebugBreak();
+            Utils::log(Utils::stringf("Exception occurred while updating world: %s", ex.what()), Utils::kLogLevelError);
         }
         catch(...) {
-            Utils::logError("Exception occured while updating world");
+            //Utils::DebugBreak();
+            Utils::log("Exception occurred while updating world", Utils::kLogLevelError);
         }
+
         return true;
     }
 
 private:
     PhysicsEngineBase* physics_engine_ = nullptr;
-
     common_utils::ScheduledExecutor executor_;
 };
 

@@ -17,22 +17,18 @@ class FirstOrderFilter : UpdatableObject {
     This class can be used to apply a first order filter on a signal.
     It allows different acceleration and deceleration time constants.
 
-    Short reveiw of discrete time implementation of first order system:
+    Short review of discrete time implementation of first order system:
     Laplace:
     X(s)/U(s) = 1/(tau*s + 1)
-    continous time system:
+    continuous time system:
     dx(t) = (-1/tau)*x(t) + (1/tau)*u(t)
     discretized system (ZoH):
     x(k+1) = exp(samplingTime*(-1/tau))*x(k) + (1 - exp(samplingTime*(-1/tau))) * u(k)
     */
-private:
-    float timeConstant_;
-    T output_, input_;
-    T initial_output_, initial_input_;
 public:
     FirstOrderFilter()
     {
-        FirstOrderFilter::reset();
+        //allow default constructor with later call for initialize
     }
     FirstOrderFilter(float timeConstant, T initial_input, T initial_output)
     {
@@ -43,23 +39,29 @@ public:
         timeConstant_ = timeConstant;
         initial_input_ = initial_input;
         initial_output_ = initial_output;
-        FirstOrderFilter::reset();
     }
 
     //*** Start: UpdatableState implementation ***//
     virtual void reset() override
     {
+        UpdatableObject::reset();
+
+        last_time_ = clock()->nowNanos();
         input_ = initial_input_;
         output_ = initial_output_;
     }
 
-    virtual void update(real_T dt) override
+    virtual void update() override
     {
+        UpdatableObject::update();
+
+        TTimeDelta dt = clock()->updateSince(last_time_);
+
         //lower the weight for previous value if its been long time
         //TODO: minimize use of exp
-        float alpha = expf(-dt / timeConstant_);
+        double alpha = exp(-dt / timeConstant_);
         // x(k+1) = Ad*x(k) + Bd*u(k)
-        output_ = output_ * alpha + input_ * (1 - alpha);
+        output_ = static_cast<real_T>(output_ * alpha + input_ * (1 - alpha));
     }
     //*** End: UpdatableState implementation ***//
 
@@ -77,6 +79,12 @@ public:
     {
         return output_;
     }
+
+private:
+    float timeConstant_;
+    T output_, input_;
+    T initial_output_, initial_input_;
+    TTimePoint last_time_;
 };
 
 }} //namespace

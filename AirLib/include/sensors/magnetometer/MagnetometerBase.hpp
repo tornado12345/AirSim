@@ -1,8 +1,8 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-#ifndef msr_air_copter_sim_MagnetometerBase_hpp
-#define msr_air_copter_sim_MagnetometerBase_hpp
+#ifndef msr_airlib_MagnetometerBase_hpp
+#define msr_airlib_MagnetometerBase_hpp
 
 
 #include "sensors/SensorBase.hpp"
@@ -13,7 +13,7 @@ namespace msr { namespace airlib {
 class MagnetometerBase  : public SensorBase {
 public: //types
     struct Output { //same fields as ROS message
-        Vector3r magnetic_field_body;
+        Vector3r magnetic_field_body; //in Gauss
         vector<real_T> magnetic_field_covariance; //9 elements 3x3 matrix    
     };
 

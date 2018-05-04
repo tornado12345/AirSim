@@ -1,10 +1,11 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-#ifndef msr_air_copter_sim_SimpleImuParams_hpp
-#define msr_air_copter_sim_SimpleImuParams_hpp
+#ifndef msr_airlib_SimpleImuParams_hpp
+#define msr_airlib_SimpleImuParams_hpp
 
 #include "common/Common.hpp"
+#include "common/EarthUtils.hpp"
 #include <cmath>
 
 
@@ -33,7 +34,7 @@ struct ImuSimpleParams {
 
     struct Accelerometer {
         //velocity random walk (ARW)
-        real_T vrw = 0.24f * EarthUtils::Gravity / 1E3f; //mg converted to m/s^2 
+        real_T vrw = 0.24f * EarthUtils::Gravity / 1.0E3f; //mg converted to m/s^2 
         //Bias Stability (tau = 800s)
         real_T tau = 800;
         real_T bias_stability = 36.0f * 1E-6f * 9.80665f; //ug converted to m/s^2

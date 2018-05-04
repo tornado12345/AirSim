@@ -7,7 +7,7 @@
 #include <type_traits>
 #include <valarray>
 
-namespace common_utils { namespace type_utils {
+namespace mavlink_utils { namespace type_utils {
 	//from: https://raw.githubusercontent.com/louisdx/cxx-prettyprint/master/prettyprint.hpp
 	//also see https://gist.github.com/louisdx/1076849
     namespace detail
@@ -30,7 +30,7 @@ namespace common_utils { namespace type_utils {
             static const bool value = sizeof(test<T>(nullptr)) == sizeof(yes);
             using type =  T;
 
-            void dummy(); //for GCC to supress -Wctor-dtor-privacy
+            void dummy(); //for GCC to suppress -Wctor-dtor-privacy
         };
 
         template <typename T>
@@ -55,7 +55,7 @@ namespace common_utils { namespace type_utils {
             static bool const beg_value = sizeof(f<T>(nullptr)) == sizeof(yes);
             static bool const end_value = sizeof(g<T>(nullptr)) == sizeof(yes);
 
-            void dummy(); //for GCC to supress -Wctor-dtor-privacy
+            void dummy(); //for GCC to suppress -Wctor-dtor-privacy
         };
 
     }  // namespace detail

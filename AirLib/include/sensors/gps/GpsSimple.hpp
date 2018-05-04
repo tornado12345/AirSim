@@ -1,8 +1,8 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-#ifndef msr_air_copter_sim_Gps_hpp
-#define msr_air_copter_sim_Gps_hpp
+#ifndef msr_airlib_Gps_hpp
+#define msr_airlib_Gps_hpp
 
 #include <random>
 #include "common/Common.hpp"
@@ -17,53 +17,45 @@ namespace msr { namespace airlib {
 
 class GpsSimple : public GpsBase {
 public: //methods
-    GpsSimple()
+    GpsSimple(const GpsSimpleParams& params = GpsSimpleParams())
+        : params_(params)
     {
-        GpsSimple::reset();
-    }
-    GpsSimple(GroundTruth* ground_truth)
-    {
-        initialize(ground_truth);
-    }
-    void initialize(GroundTruth* ground_truth)
-    {
-        GpsBase::initialize(ground_truth);
-
         //initialize frequency limiter
         freq_limiter_.initialize(params_.update_frequency, params_.startup_delay);
         delay_line_.initialize(params_.update_latency);
-        
-        //initialize filters
-        eph_filter.initialize(params_.eph_time_constant, params_.eph_final, params_.eph_initial); //starting dilution set to 100 which we will reduce over time to targetted 0.3f, with 45% accuracy within 100 updates, each update occuring at 0.2s interval
-        epv_filter.initialize(params_.epv_time_constant, params_.epv_final, params_.epv_initial);
-    
-        GpsSimple::reset();
-    }
 
+        //initialize filters
+        eph_filter.initialize(params_.eph_time_constant, params_.eph_final, params_.eph_initial); //starting dilution set to 100 which we will reduce over time to targeted 0.3f, with 45% accuracy within 100 updates, each update occurring at 0.2s interval
+        epv_filter.initialize(params_.epv_time_constant, params_.epv_final, params_.epv_initial);
+    }
 
     //*** Start: UpdatableState implementation ***//
     virtual void reset() override
     {
+        GpsBase::reset();
+
         freq_limiter_.reset();
         delay_line_.reset();
 
         eph_filter.reset();
         epv_filter.reset();
 
-        addOutputToDelayLine(eph_filter.getOutput(), epv_filter.getOutput(), 0);
+        addOutputToDelayLine(eph_filter.getOutput(), epv_filter.getOutput());
     }
 
-    virtual void update(real_T dt) override
+    virtual void update() override
     {
-        freq_limiter_.update(dt);
-        eph_filter.update(dt);
-        epv_filter.update(dt);
+        GpsBase::update();
+
+        freq_limiter_.update();
+        eph_filter.update();
+        epv_filter.update();
 
         if (freq_limiter_.isWaitComplete()) {   //update output
-            addOutputToDelayLine(eph_filter.getOutput(), epv_filter.getOutput(), freq_limiter_.getLastElapsedIntervalSec());
+            addOutputToDelayLine(eph_filter.getOutput(), epv_filter.getOutput());
         }
 
-        delay_line_.update(dt);
+        delay_line_.update();
 
         if (freq_limiter_.isWaitComplete())
             setOutput(delay_line_.getOutput());
@@ -73,13 +65,13 @@ public: //methods
 
     virtual ~GpsSimple() = default;
 private:
-    void addOutputToDelayLine(real_T eph, real_T epv, real_T dt)
+    void addOutputToDelayLine(real_T eph, real_T epv)
     {
         Output output;
         const GroundTruth& ground_truth = getGroundTruth();
 
         //GNSS
-        output.gnss.time_utc = static_cast<long>(freq_limiter_.getTimestamp());
+        output.gnss.time_utc = static_cast<uint64_t>(clock()->nowNanos() / 1.0E3);
         output.gnss.geo_point = ground_truth.environment->getState().geo_point;
         output.gnss.eph = eph;
         output.gnss.epv = epv;

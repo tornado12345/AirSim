@@ -5,21 +5,25 @@
 #include <thread>
 #include <chrono>
 #include "Utils.hpp"
+#include "FileSystem.hpp"
 #include "MavLinkVehicle.hpp"
 #include "MavLinkMessages.hpp"
 #include "MavLinkConnection.hpp"
 #include "MavLinkVideoStream.hpp"
 #include "MavLinkTcpServer.hpp"
 #include "MavLinkFtpClient.hpp"
-#include <thread>
-#include <boost/algorithm/string.hpp>
-#include <boost/filesystem.hpp>
-#include <boost/filesystem/fstream.hpp>
-#include "MavLinkSemaphore.hpp"
+#include "Semaphore.hpp"
+
+STRICT_MODE_OFF
+#include "json.hpp"
+STRICT_MODE_ON
+
 #include <iostream>
 
-using namespace common_utils;
+using namespace mavlink_utils;
 using namespace mavlinkcom;
+
+extern std::string replaceAll(std::string s, char toFind, char toReplace);
 
 void UnitTests::RunAll(std::string comPort, int boardRate)
 {
@@ -34,6 +38,7 @@ void UnitTests::RunAll(std::string comPort, int boardRate)
 	RunTest("SendImageTest", [=] { SendImageTest(); });
 	RunTest("SerialPx4Test", [=] { SerialPx4Test(); });
 	RunTest("FtpTest", [=] { FtpTest(); });
+    RunTest("JSonLogTest", [=] { JSonLogTest(); });
 }
 
 void UnitTests::RunTest(const std::string& name, TestHandler handler)
@@ -52,7 +57,7 @@ void UnitTests::UdpPingTest() {
 
 	auto localConnection = MavLinkConnection::connectLocalUdp("jMavSim", "127.0.0.1", 14588);
 
-	MavLinkSemaphore  received;
+	Semaphore  received;
 	auto id = localConnection->subscribe([&](std::shared_ptr<MavLinkConnection> connection, const MavLinkMessage& msg) {
 		printf("    Received message %d\n", msg.msgid);
 		received.post();
@@ -87,11 +92,11 @@ void UnitTests::TcpPingTest() {
 	const int testPort = 45166;
 
 	std::shared_ptr<MavLinkTcpServer> server = std::make_shared<MavLinkTcpServer>("127.0.0.1", testPort);
-	std::shared_ptr<MavLinkNode> serverNode;
-
-	server->acceptTcp("test", [&](std::shared_ptr<MavLinkConnection> con) {
-
-		serverNode = std::make_shared<MavLinkNode>(1, 1);
+	
+	std::future<int> future = std::async(std::launch::async, [=] {
+		// accept one incoming connection
+		std::shared_ptr<MavLinkConnection> con = server->acceptTcp("test");
+		std::shared_ptr<MavLinkNode> serverNode = std::make_shared<MavLinkNode>(1, 1);
 		serverNode->connect(con);
 
 		// send a heartbeat to the client
@@ -103,9 +108,10 @@ void UnitTests::TcpPingTest() {
 		hb.system_status = 1;
 		hb.type = 1;
 		serverNode->sendMessage(hb);
+		return 0;
 	});
 
-	MavLinkSemaphore  received;
+	Semaphore  received;
 	auto client = MavLinkConnection::connectTcp("local", "127.0.0.1", "127.0.0.1", testPort);
 	client->subscribe([&](std::shared_ptr<MavLinkConnection> connection, const MavLinkMessage& msg) {
 		printf("Received msg %d\n", msg.msgid);
@@ -124,7 +130,7 @@ void UnitTests::SerialPx4Test()
 	auto connection = MavLinkConnection::connectSerial("px4", com_port_, baud_rate_);
 
 	int count = 0;
-	MavLinkSemaphore  received;
+	Semaphore  received;
 
 	auto id = connection->subscribe([&](std::shared_ptr<MavLinkConnection> con, const MavLinkMessage& msg) {
 		//printf("    Received message %d\n", static_cast<int>(msg.msgid));
@@ -163,7 +169,7 @@ public:
 					image[i] = i;
 				}
 				stream->sendFrame(reinterpret_cast<uint8_t*>(image), size, 100, 100, 0, 0);
-				delete image;
+				delete[] image;
 			}
 		});
 	}
@@ -178,10 +184,13 @@ void UnitTests::SendImageTest() {
 
 	std::shared_ptr<MavLinkTcpServer> server = std::make_shared<MavLinkTcpServer>(testAddr, testPort);
 
-	// this is the server code, it will accept 1 connection from a client on port 14588
-	// for this unit test we are expecting a request to send an image.
-	server->acceptTcp("test", [&](std::shared_ptr<MavLinkConnection> con) {
+	std::future<int> future = std::async(std::launch::async, [=] {
+
+		// this is the server code, it will accept 1 connection from a client on port 14588
+		// for this unit test we are expecting a request to send an image.
+		auto con = server->acceptTcp("test");
 		this->server_ = new ImageServer(con);
+		return 0;
 	});
 
 	// add a drone connection so the mavLinkCom can use it to send requests to the above server.
@@ -217,97 +226,236 @@ void UnitTests::SendImageTest() {
 	return;
 }
 
+void UnitTests::VerifyFile(MavLinkFtpClient& ftp, const std::string& dir, const std::string& name, bool exists, bool isdir)
+{
+    MavLinkFtpProgress progress;
+    std::vector<MavLinkFileInfo> files;
+    ftp.list(progress, dir, files);
+    if (progress.error != 0) {
+        throw std::runtime_error(Utils::stringf("unexpected error %d: '%s' from ftp list '%s' command", 
+            progress.error, progress.message.c_str(), dir.c_str()));
+    }
+
+    bool found = false;
+    for (auto ptr = files.begin(), end = files.end(); ptr != end; ptr++) {
+        MavLinkFileInfo i = *ptr;
+        if (isdir == i.is_directory && i.name == name) {
+            found = true;
+        }
+    }
+    if (!found && exists) {
+        throw std::runtime_error(Utils::stringf("The %s '%s' not found in '%s', but it should be there", 
+            isdir ? "dir" : "file", name.c_str(), dir.c_str()));
+    }
+    else if (found && !exists) {
+        throw std::runtime_error(Utils::stringf("The %s '%s' was found in '%s', but it should not have been",
+            isdir ? "dir" : "file", name.c_str(), dir.c_str()));
+    }
+
+}
+
 void UnitTests::FtpTest() {
 
-	auto connection = MavLinkConnection::connectSerial("px4", com_port_, baud_rate_);
+    std::shared_ptr<MavLinkConnection> connection = MavLinkConnection::connectSerial("px4", com_port_, baud_rate_);
 
-	MavLinkFtpClient ftp{ 166,1 };
-	ftp.connect(connection);
+    MavLinkFtpClient ftp{ 166,1 };
+    ftp.connect(connection);
 
-	MavLinkFtpProgress progress;
-	std::vector<MavLinkFileInfo> files;
-	ftp.list(progress, "/fs/microsd", files);
-	if (progress.error != 0) {
-		throw std::runtime_error(Utils::stringf("unexpected error %d: '%s' from ftp list '/fs/microsd' command - does your pixhawk have an sd card?",
-			progress.error, progress.message.c_str()));
-	}
-	else 
-	{
-		printf("Found %d files in '/fs/microsd' folder\n", static_cast<int>(files.size()));
-	}
+    try {
 
-	auto tempPath = boost::filesystem::temp_directory_path();
-	tempPath.append("ftptest.txt", boost::filesystem::path::codecvt());
-	boost::filesystem::ofstream stream(tempPath);
+        MavLinkFtpProgress progress;
+        std::vector<MavLinkFileInfo> files;
 
-	const char* TestPattern = "This is line %d\n";
+        // ================ ls
 
-	for (int i = 0; i < 100; i++) {
-		std::string line = Utils::stringf(TestPattern, i);
-		stream << line;
-	}
+        ftp.list(progress, "/fs/microsd", files);
+        if (progress.error != 0) {
+            throw std::runtime_error(Utils::stringf("unexpected error %d: '%s' from ftp list '/fs/microsd' command - does your pixhawk have an sd card?",
+                progress.error, progress.message.c_str()));
+        }
+        else
+        {
+            printf("Found %d files in '/fs/microsd' folder\n", static_cast<int>(files.size()));
+        }
 
-	stream.close();
+        // ================ put file
 
-	std::string remotePath = "/fs/microsd/ftptest.txt";
-	std::string localPath = tempPath.generic_string();
+        auto tempPath = FileSystem::getTempFolder();
+        tempPath = FileSystem::combine(tempPath, "ftptest.txt");
+        std::ofstream stream(tempPath);
+
+        const char* TestPattern = "This is line %d\n";
+
+        for (int i = 0; i < 100; i++) {
+            std::string line = Utils::stringf(TestPattern, i);
+            stream << line;
+        }
+
+        stream.close();
+
+        std::string remotePath = "/fs/microsd/ftptest.txt";
+        std::string localPath = tempPath;
 #if defined(_WIN32)
-	// I wish there was a cleaner way to do this, but I can't use tempPath.native() because on windows that is a wstring and on our linux build it is a string.
-	boost::replace_all(localPath, "/", "\\");
+        // I wish there was a cleaner way to do this, but I can't use tempPath.native() because on windows that is a wstring and on our linux build it is a string.
+        replaceAll(localPath, '/', '\\');
 #endif
 
-	ftp.put(progress, remotePath, localPath);
+        ftp.put(progress, remotePath, localPath);
 
-	if (progress.error != 0) {
-		throw std::runtime_error(Utils::stringf("unexpected error %d: '%s' from ftp put command",
-			progress.error, progress.message.c_str()));
-	}
-	else
-	{
-		printf("put succeeded\n");
-	}
+        if (progress.error != 0) {
+            throw std::runtime_error(Utils::stringf("unexpected error %d: '%s' from ftp put command",
+                progress.error, progress.message.c_str()));
+        }
+        else
+        {
+            printf("put succeeded\n");
+        }
 
-	boost::filesystem::remove(tempPath);
+        FileSystem::remove(tempPath);
 
-	ftp.get(progress, remotePath, localPath);
+        VerifyFile(ftp, "/fs/microsd", "ftptest.txt", true, false);
 
-	if (progress.error != 0) {
-		throw std::runtime_error(Utils::stringf("unexpected error %d: '%s' from ftp get command",
-			progress.error, progress.message.c_str()));
-	}
+        // ================ get file
+        ftp.get(progress, remotePath, localPath);
 
-	// verify the file contents.
-	boost::filesystem::ifstream istream(tempPath);
+        if (progress.error != 0) {
+            throw std::runtime_error(Utils::stringf("unexpected error %d: '%s' from ftp get command",
+                progress.error, progress.message.c_str()));
+        }
 
-	int count = 0;
-	std::string line;
-	std::getline(istream, line);
-	while (line.size() > 0) {
-		line += '\n';
-		std::string expected = Utils::stringf(TestPattern, count);
-		if (line != expected)
-		{
-			throw std::runtime_error(Utils::stringf("ftp local file contains unexpected contents '%s' on line %d\n", line.c_str(), count));
-		}
-		count++;
-		std::getline(istream, line);
-	}
+        // verify the file contents.
+        std::ifstream istream(tempPath);
 
-	printf("get succeeded\n");
+        int count = 0;
+        std::string line;
+        std::getline(istream, line);
+        while (line.size() > 0) {
+            line += '\n';
+            std::string expected = Utils::stringf(TestPattern, count);
+            if (line != expected)
+            {
+                throw std::runtime_error(Utils::stringf("ftp local file contains unexpected contents '%s' on line %d\n", line.c_str(), count));
+            }
+            count++;
+            std::getline(istream, line);
+        }
 
-	istream.close();
-	boost::filesystem::remove(tempPath);
+        printf("get succeeded\n");
 
-	ftp.remove(progress, remotePath);
+        istream.close();
 
-	if (progress.error != 0) {
-		throw std::runtime_error(Utils::stringf("unexpected error %d: '%s' from ftp remove command",
-			progress.error, progress.message.c_str()));
-	}
-	else
-	{
-		printf("remove succeeded\n");
-	}
+        // ================ remove file
+        FileSystem::remove(tempPath);
 
+        ftp.remove(progress, remotePath);
+
+        if (progress.error != 0) {
+            throw std::runtime_error(Utils::stringf("unexpected error %d: '%s' from ftp remove command",
+                progress.error, progress.message.c_str()));
+        }
+        else
+        {
+            printf("remove succeeded\n");
+        }
+
+        VerifyFile(ftp, "/fs/microsd", "ftptest.txt", false, false);
+
+        // ================ make directory
+        // D:\px4\src\lovettchris\Firmware\rootfs\fs\microsd
+        ftp.mkdir(progress, "/fs/microsd/testrmdir"); 
+        if (progress.error != 0) {
+            throw std::runtime_error(Utils::stringf("unexpected error %d: '%s' from ftp mkdir '/fs/microsd/testrmdir' command",
+                progress.error, progress.message.c_str()));
+        }
+
+        VerifyFile(ftp, "/fs/microsd", "testrmdir", true, true);
+
+        // ================ remove directory
+        ftp.rmdir(progress, "/fs/microsd/testrmdir");
+        if (progress.error != 0) {
+            throw std::runtime_error(Utils::stringf("unexpected error %d: '%s' from ftp rmdir '/fs/microsd/testrmdir' command",
+                progress.error, progress.message.c_str()));
+        }
+
+        VerifyFile(ftp, "/fs/microsd", "testrmdir", false, true);
+
+    }
+    catch (...) {
+        ftp.close();
+        connection->close();
+        connection = nullptr;
+        throw;
+    }
+
+    ftp.close();
+    connection->close();
+    connection = nullptr;
+
+}
+
+void UnitTests::JSonLogTest()
+{
+    auto connection = MavLinkConnection::connectSerial("px4", com_port_, baud_rate_);
+
+    MavLinkFileLog log;
+
+    auto tempPath = FileSystem::getTempFolder();
+    tempPath = FileSystem::combine(tempPath, "test.mavlink");
+    log.openForWriting(tempPath, true);
+
+    int count = 0;
+    Semaphore  received;
+
+    auto id = connection->subscribe([&](std::shared_ptr<MavLinkConnection> con, const MavLinkMessage& msg) {
+        count++;
+        log.write(msg);
+        if (count > 50) {
+            received.post();
+        }
+    });
+
+    if (!received.timed_wait(30000)) {
+        throw std::runtime_error("PX4 is not sending 50 messages in 30 seconds.");
+    }
+
+    connection->unsubscribe(id);
+    connection->close();
+    log.close();
+
+    // Now verification
+    nlohmann::json doc;
+
+    std::ifstream s;
+    FileSystem::openTextFile(tempPath, s);
+    if (!s.fail()) {
+        s >> doc;        
+    }
+    else {
+        throw std::runtime_error(Utils::stringf("Cannot open json file at '%s'.", tempPath.c_str()));
+    }
+
+    if (doc.count("rows") == 1) {
+        nlohmann::json rows = doc["rows"].get<nlohmann::json>();
+        int found = 0;
+        int imu = 0;
+        if (rows.is_array()) {
+            size_t size = rows.size();
+            for (size_t i = 0; i < size; i++)
+            {
+                auto ptr = rows[i];
+                if (ptr.is_object()) {
+                    if (ptr.count("name") == 1) {
+                        auto name = ptr["name"].get<std::string>();
+                        if (name == "HIGHRES_IMU") {
+                            imu++;
+                        }
+                        found++;
+                    }
+                }
+            }
+        }
+
+        printf("found %d valid rows in the json file, and %d HIGHRES_IMU records\n", found, imu);
+    }
 
 }

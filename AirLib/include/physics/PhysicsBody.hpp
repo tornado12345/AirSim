@@ -5,33 +5,63 @@
 #define airsim_core_PhysicsBody_hpp
 
 #include "common/Common.hpp"
-#include "common/UpdatableContainer.hpp"
+#include "common/UpdatableObject.hpp"
 #include "PhysicsBodyVertex.hpp"
 #include "common/CommonStructs.hpp"
 #include "Kinematics.hpp"
 #include "Environment.hpp"
 #include <unordered_set>
+#include <exception>
 
 namespace msr { namespace airlib {
 
 class PhysicsBody : public UpdatableObject {
-public: //abstract interface
-    virtual Vector3r getLinearDragFactor() const = 0;
-    virtual Vector3r getAngularDragFactor() const = 0;
-    virtual uint vertexCount() const = 0;
-    virtual void kinematicsUpdated(real_T dt) = 0;
+public: //interface
+    virtual void kinematicsUpdated() = 0;
     virtual real_T getRestitution() const = 0;
     virtual real_T getFriction() const = 0;
+
     //derived class may return covariant type
-    //TODO: add const version
-    virtual PhysicsBodyVertex& getVertex(uint index) = 0;
-    virtual const PhysicsBodyVertex& getVertex(uint index) const = 0;
+    virtual uint wrenchVertexCount() const
+    {
+        return 0;
+    }
+    virtual PhysicsBodyVertex& getWrenchVertex(uint index)
+    {
+        unused(index);
+        throw std::out_of_range("no physics vertex are available");
+    }
+    virtual const PhysicsBodyVertex& getWrenchVertex(uint index) const
+    {
+        unused(index);
+        throw std::out_of_range("no physics vertex are available");
+    }
+
+    virtual uint dragVertexCount() const
+    {
+        return 0;
+    }
+    virtual PhysicsBodyVertex& getDragVertex(uint index)
+    {
+        unused(index);
+        throw std::out_of_range("no physics vertex are available");
+    }
+    virtual const PhysicsBodyVertex& getDragVertex(uint index) const
+    {
+        unused(index);
+        throw std::out_of_range("no physics vertex are available");
+    }
+    virtual void setCollisionInfo(const CollisionInfo& collision_info)
+    {
+        collision_info_ = collision_info;
+    }
+
 
 public: //methods
     //constructors
     PhysicsBody()
     {
-        PhysicsBody::reset();
+        //allow default constructor with later call for initialize
     }
     PhysicsBody(real_T mass, const Matrix3x3r& inertia, const Kinematics::State& initial_kinematic_state, Environment* environment)
     {
@@ -42,11 +72,10 @@ public: //methods
         kinematics_.initialize(initial_kinematic_state);
 
         mass_ = mass;
+        mass_inv_ = 1.0f / mass;
         inertia_ = inertia;
         inertia_inv_ = inertia_.inverse();
         environment_ = environment;
-
-        PhysicsBody::reset();
     }
 
     //enable physics body detection
@@ -59,25 +88,44 @@ public: //methods
     //*** Start: UpdatableState implementation ***//
     virtual void reset() override
     {
+        UpdatableObject::reset();
+
         kinematics_.reset();
+
         if (environment_)
             environment_->reset();
         wrench_ = Wrench::zero();
-    }
-
-    virtual void update(real_T dt) override
-    {
-        //update position from kinematics so we have latest position after physics update
-        environment_->setPosition(getKinematics().pose.position);
-        environment_->update(dt);
-
-        kinematics_.update(dt);
+        collision_info_ = CollisionInfo();
+        collision_response_info_ = CollisionResponseInfo();
 
         //update individual vertices
-        for (uint vertex_index = 0; vertex_index < vertexCount(); ++vertex_index) {
-            getVertex(vertex_index).update(dt);
+        for (uint vertex_index = 0; vertex_index < wrenchVertexCount(); ++vertex_index) {
+            getWrenchVertex(vertex_index).reset();
+        }
+        for (uint vertex_index = 0; vertex_index < dragVertexCount(); ++vertex_index) {
+            getDragVertex(vertex_index).reset();
         }
     }
+
+    virtual void update() override
+    {
+        UpdatableObject::update();
+
+        //update position from kinematics so we have latest position after physics update
+        environment_->setPosition(getKinematics().pose.position);
+        environment_->update();
+
+        kinematics_.update();
+
+        //update individual vertices
+        for (uint vertex_index = 0; vertex_index < wrenchVertexCount(); ++vertex_index) {
+            getWrenchVertex(vertex_index).update();
+        }
+        for (uint vertex_index = 0; vertex_index < dragVertexCount(); ++vertex_index) {
+            getDragVertex(vertex_index).update();
+        }
+    }
+
     virtual void reportState(StateReporter& reporter) override
     {
         //call base
@@ -94,6 +142,10 @@ public: //methods
     {
         return mass_;
     }
+    real_T getMassInv()  const
+    {
+        return mass_inv_;
+    }    
     const Matrix3x3r& getInertia()  const
     {
         return inertia_;
@@ -127,6 +179,11 @@ public: //methods
     }
     void setKinematics(const Kinematics::State& state)
     {
+        if (VectorMath::hasNan(state.twist.linear)) {
+            //Utils::DebugBreak();
+            Utils::log("Linear velocity had NaN!", Utils::kLogLevelError);
+        }
+
         kinematics_.setState(state);
     }
     const Kinematics::State& getInitialKinematics() const
@@ -134,6 +191,10 @@ public: //methods
         return kinematics_.getInitialState();
     }
     const Environment& getEnvironment() const
+    {
+        return *environment_;
+    }
+    Environment& getEnvironment()
     {
         return *environment_;
     }
@@ -151,25 +212,34 @@ public: //methods
     }
     const CollisionInfo& getCollisionInfo() const
     {
-        return collison_info_;
-    }
-    //ability to get reference so individual fields can be modified
-    void setCollisionInfo(const CollisionInfo& collison_info)
-    {
-        collison_info_ = collison_info;
+        return collision_info_;
     }
 
+    const CollisionResponseInfo& getCollisionResponseInfo() const
+    {
+        return collision_response_info_;
+    }
+    CollisionResponseInfo& getCollisionResponseInfo()
+    {
+        return collision_response_info_;
+    }
+
+
+public:
+    //for use in physics angine: //TODO: use getter/setter or friend method?
+    TTimePoint last_kinematics_time;
+
 private:
-    real_T mass_;
+    real_T mass_, mass_inv_;
     Matrix3x3r inertia_, inertia_inv_;
 
     Kinematics kinematics_;
 
     //force is in world frame but torque is not
-    //TODO: make torque in world frame too
     Wrench wrench_;
 
-    CollisionInfo collison_info_;
+    CollisionInfo collision_info_;
+    CollisionResponseInfo collision_response_info_;
 
     Environment* environment_ = nullptr;
 };

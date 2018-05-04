@@ -8,9 +8,9 @@
 using namespace mavlinkcom;
 using namespace mavlinkcom_impl;
 
-MavLinkVehicle::MavLinkVehicle(int local_system_id, int local_component_id)
+MavLinkVehicle::MavLinkVehicle(int localSystemId, int localComponentId)
 {
-	pImpl.reset(new MavLinkVehicleImpl(local_system_id, local_component_id));
+	pImpl.reset(new MavLinkVehicleImpl(localSystemId, localComponentId));
 }
 
 MavLinkVehicle::MavLinkVehicle(){
@@ -26,10 +26,16 @@ AsyncResult<bool> MavLinkVehicle::armDisarm(bool arm)
 	return ptr->armDisarm(arm);
 }
 
-AsyncResult<bool>  MavLinkVehicle::takeoff(float altitude, float pitch, float yaw)
+AsyncResult<bool>  MavLinkVehicle::takeoff(float z, float pitch, float yaw)
 {
 	auto ptr = static_cast<MavLinkVehicleImpl*>(pImpl.get());
-	return ptr->takeoff(altitude, pitch, yaw);
+	return ptr->takeoff(z, pitch, yaw);
+}
+
+AsyncResult<bool> MavLinkVehicle::waitForAltitude(float z, float dz, float dvz)
+{
+	auto ptr = static_cast<MavLinkVehicleImpl*>(pImpl.get());
+	return ptr->waitForAltitude(z, dz, dvz);
 }
 
 AsyncResult<bool>  MavLinkVehicle::land(float yaw, float lat, float lon, float altitude)
@@ -42,6 +48,12 @@ AsyncResult<bool>  MavLinkVehicle::returnToHome()
 {
 	auto ptr = static_cast<MavLinkVehicleImpl*>(pImpl.get());
 	return ptr->returnToHome();
+}
+
+AsyncResult<bool>  MavLinkVehicle::setMode(int modeFlags, int customMode, int customSubMode)
+{
+    auto ptr = static_cast<MavLinkVehicleImpl*>(pImpl.get());
+    return ptr->setMode(modeFlags, customMode, customSubMode);
 }
 
 bool MavLinkVehicle::isLocalControlSupported()
@@ -86,10 +98,22 @@ void MavLinkVehicle::moveByAttitude(float roll, float pitch, float yaw, float ro
 	ptr->moveByAttitude(roll, pitch, yaw, rollRate, pitchRate, yawRate, thrust);
 }
 
+void MavLinkVehicle::writeMessage(MavLinkMessageBase& message, bool update_stats)
+{
+    auto ptr = static_cast<MavLinkVehicleImpl*>(pImpl.get());
+    ptr->writeMessage(message, update_stats);
+}
+
 AsyncResult<bool> MavLinkVehicle::loiter()
 {
 	auto ptr = static_cast<MavLinkVehicleImpl*>(pImpl.get());
 	return ptr->loiter();
+}
+
+AsyncResult<bool> MavLinkVehicle::setPositionHoldMode()
+{
+    auto ptr = static_cast<MavLinkVehicleImpl*>(pImpl.get());
+    return ptr->setPositionHoldMode();
 }
 
 void MavLinkVehicle::requestControl()
@@ -111,22 +135,16 @@ bool MavLinkVehicle::hasOffboardControl()
 	return ptr->hasOffboardControl();
 }
 
-void MavLinkVehicle::offboardIdle() 
+AsyncResult<bool> MavLinkVehicle::setStabilizedFlightMode()
 {
 	auto ptr = static_cast<MavLinkVehicleImpl*>(pImpl.get());
-	ptr->offboardIdle();
+	return ptr->setStabilizedFlightMode();
 }
 
-void MavLinkVehicle::setStabilizedFlightMode()
+AsyncResult<bool> MavLinkVehicle::setHomePosition(float lat, float lon, float alt)
 {
 	auto ptr = static_cast<MavLinkVehicleImpl*>(pImpl.get());
-	ptr->setStabilizedFlightMode();
-}
-
-void MavLinkVehicle::setHomePosition(float lat, float lon, float alt)
-{
-	auto ptr = static_cast<MavLinkVehicleImpl*>(pImpl.get());
-	ptr->setHomePosition(lat, lon, alt);
+	return ptr->setHomePosition(lat, lon, alt);
 }
 
 AsyncResult<bool> MavLinkVehicle::allowFlightControlOverUsb()
@@ -135,10 +153,10 @@ AsyncResult<bool> MavLinkVehicle::allowFlightControlOverUsb()
 	return ptr->allowFlightControlOverUsb();
 }
 
-void MavLinkVehicle::setAutoMode()
+AsyncResult<bool>MavLinkVehicle::setMissionMode()
 {
 	auto ptr = static_cast<MavLinkVehicleImpl*>(pImpl.get());
-	ptr->setAutoMode();
+	return ptr->setMissionMode();
 }
 
 AsyncResult<MavLinkHomePosition> MavLinkVehicle::waitForHomePosition()

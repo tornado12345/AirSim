@@ -1,18 +1,35 @@
+// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License.
+
 using UnrealBuildTool;
 using System.IO;
 
 public class AirSim : ModuleRules
 {
-    const string readmurl = "https://github.com/Microsoft/AirSim/blob/master/docs/install_boost.md";
+    const string readmurl = "https://github.com/Microsoft/AirSim/blob/master/docs/install_eigen.md";
 
     private string ModulePath
     {
         get { return ModuleDirectory; }
     }
 
-    private string AirSimPath
+    private string AirLibPath
     {
-        get { return Path.GetFullPath(Path.Combine(ModulePath, "AirLib")); }
+        get { return Path.Combine(ModulePath, "AirLib"); }
+    }
+    private string AirSimPluginPath
+    {
+        get { return Directory.GetParent(ModulePath).FullName; }
+    }
+    private string ProjectBinariesPath
+    {
+        get { return Path.Combine(
+                Directory.GetParent(AirSimPluginPath).Parent.FullName, "Binaries");
+        }
+    }
+    private string AirSimPluginDependencyPath
+    {
+        get { return Path.Combine(AirSimPluginPath, "Dependencies"); }
     }
 
     private enum CompileMode
@@ -23,25 +40,27 @@ public class AirSim : ModuleRules
         CppCompileWithRpc
     }
 
-    private void SetupCompileMode(CompileMode mode, TargetInfo Target)
+    private void SetupCompileMode(CompileMode mode, ReadOnlyTargetRules Target)
     {
+        LoadAirSimDependency(Target, "MavLinkCom", "MavLinkCom");
+
         switch (mode)
         {
             case CompileMode.HeaderOnlyNoRpc:
                 Definitions.Add("AIRLIB_HEADER_ONLY=1");
                 Definitions.Add("AIRLIB_NO_RPC=1");
-                AddLibDependency("AirLib", Path.Combine(AirSimPath, "lib"), "AirLib", Target, false);
+                AddLibDependency("AirLib", Path.Combine(AirLibPath, "lib"), "AirLib", Target, false);
                 break;
             case CompileMode.HeaderOnlyWithRpc:
                 Definitions.Add("AIRLIB_HEADER_ONLY=1");
-                AddLibDependency("AirLib", Path.Combine(AirSimPath, "lib"), "AirLib", Target, false);
+                AddLibDependency("AirLib", Path.Combine(AirLibPath, "lib"), "AirLib", Target, false);
+                LoadAirSimDependency(Target, "rpclib", "rpc");
                 break;
             case CompileMode.CppCompileNoRpc:
                 LoadAirSimDependency(Target, "MavLinkCom", "MavLinkCom");
                 Definitions.Add("AIRLIB_NO_RPC=1");
                 break;
             case CompileMode.CppCompileWithRpc:
-                LoadAirSimDependency(Target, "MavLinkCom", "MavLinkCom");
                 LoadAirSimDependency(Target, "rpclib", "rpc");
                 break;
             default:
@@ -50,80 +69,60 @@ public class AirSim : ModuleRules
 
     }
 
-    public AirSim(TargetInfo Target)
+    public AirSim(ReadOnlyTargetRules Target) : base(Target)
     {
-        UEBuildConfiguration.bForceEnableExceptions = true;
-        PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "RenderCore" });
+        //bEnforceIWYU = true; //to support 4.16
+        PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
+        bEnableExceptions = true;
+
+        PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "ImageWrapper", "RenderCore", "RHI", "PhysXVehicles", "Landscape" });
         PrivateDependencyModuleNames.AddRange(new string[] { "UMG", "Slate", "SlateCore" });
 
-        //supress VC++ proprietory warnings
+        //suppress VC++ proprietary warnings
         Definitions.Add("_SCL_SECURE_NO_WARNINGS=1");
         Definitions.Add("CRT_SECURE_NO_WARNINGS=1");
+        Definitions.Add("HMD_MODULE_INCLUDED=0");
 
-        AddEigenDependency();
-        PrivateIncludePaths.Add(Path.Combine(AirSimPath, "include"));
+        PrivateIncludePaths.Add(Path.Combine(AirLibPath, "include"));
+        PrivateIncludePaths.Add(Path.Combine(AirLibPath, "deps", "eigen3"));
         AddOSLibDependencies(Target);
-        AddBoostDependency();
-        LoadAirSimDependency(Target, "MavLinkCom", "MavLinkCom");
 
-        SetupCompileMode(CompileMode.HeaderOnlyWithRpc, Target);
+        SetupCompileMode(CompileMode.CppCompileWithRpc, Target);
     }
 
-    private void AddEigenDependency()
-    {
-        string eigenPath = System.Environment.GetEnvironmentVariable("EIGEN_ROOT");
-        if (string.IsNullOrEmpty(eigenPath) || !System.IO.Directory.Exists(eigenPath) || !System.IO.Directory.Exists(Path.Combine(eigenPath, "eigen3")))
-        {
-            throw new System.Exception("EIGEN_ROOT is not defined, or points to a non-existant directory, please set this environment variable.  " +
-                "See readme: " + readmurl);
-        }
-        PrivateIncludePaths.Add(Path.Combine(eigenPath, "eigen3"));
-    }
-
-    private void AddOSLibDependencies(TargetInfo Target)
+    private void AddOSLibDependencies(ReadOnlyTargetRules Target)
     {
         if (Target.Platform == UnrealTargetPlatform.Win64)
         {
             // for SHGetFolderPath.
             PublicAdditionalLibraries.Add("Shell32.lib");
+
+            //for joystick support
+            PublicAdditionalLibraries.Add("dinput8.lib");
+            PublicAdditionalLibraries.Add("dxguid.lib");
         }
     }
 
-    private void AddBoostDependency()
+    static void CopyFileIfNewer(string srcFilePath, string destFolder)
     {
-        string boost = System.Environment.GetEnvironmentVariable("BOOST_ROOT");
-        if (string.IsNullOrEmpty(boost) || !System.IO.Directory.Exists(boost))
+        FileInfo srcFile = new FileInfo(srcFilePath);
+        FileInfo destFile = new FileInfo(Path.Combine(destFolder, srcFile.Name));
+        if (!destFile.Exists || srcFile.LastWriteTime > destFile.LastWriteTime)
         {
-            throw new System.Exception("BOOST_ROOT is not defined, or points to a non-existant directory, please set this environment variable.  " +
-                "See: " + readmurl);
+            srcFile.CopyTo(destFile.FullName, true);
         }
-        string lib = Path.Combine(boost, "stage", "lib");
-        if (!System.IO.Directory.Exists(lib))
-        {
-            throw new System.Exception("Please build boost and make sure the libraries are at " + lib + ". " +
-                "See: " + readmurl);
-        }
-
-        bool found = System.IO.Directory.GetFiles(lib, "libboost_system-*.lib").Length > 0;
-        if (!found)
-        {
-            throw new System.Exception("Not finding libboost_system-*.lib in " + lib + ".  " +
-                "See: " + readmurl);
-        }
-
-        PublicLibraryPaths.Add(Path.Combine(lib));
+        //else skip
     }
 
-
-    private bool LoadAirSimDependency(TargetInfo Target, string LibName, string LibFileName)
+    private bool LoadAirSimDependency(ReadOnlyTargetRules Target, string LibName, string LibFileName)
     {
-        string LibrariesPath = Path.Combine(AirSimPath, "deps", LibName, "lib");
+        string LibrariesPath = Path.Combine(AirLibPath, "deps", LibName, "lib");
         return AddLibDependency(LibName, LibrariesPath, LibFileName, Target, true);
     }
 
-    private bool AddLibDependency(string LibName, string LibPath, string LibFileName, TargetInfo Target, bool IsAddLibInclude)
+    private bool AddLibDependency(string LibName, string LibPath, string LibFileName, ReadOnlyTargetRules Target, bool IsAddLibInclude)
     {
-        string PlatformString = (Target.Platform == UnrealTargetPlatform.Win64) ? "x64" : "x86";
+        string PlatformString = (Target.Platform == UnrealTargetPlatform.Win64 || Target.Platform == UnrealTargetPlatform.Mac) ? "x64" : "x86";
         string ConfigurationString = (Target.Configuration == UnrealTargetConfiguration.Debug) ? "Debug" : "Release";
         bool isLibrarySupported = false;
 
@@ -133,12 +132,15 @@ public class AirSim : ModuleRules
             isLibrarySupported = true;
 
             PublicAdditionalLibraries.Add(Path.Combine(LibPath, PlatformString, ConfigurationString, LibFileName + ".lib"));
+        } else if (Target.Platform == UnrealTargetPlatform.Linux || Target.Platform == UnrealTargetPlatform.Mac) {
+            isLibrarySupported = true;
+            PublicAdditionalLibraries.Add(Path.Combine(LibPath, "lib" + LibFileName + ".a"));
         }
 
         if (isLibrarySupported && IsAddLibInclude)
         {
             // Include path
-            PrivateIncludePaths.Add(Path.Combine(AirSimPath, "deps", LibName, "include"));
+            PrivateIncludePaths.Add(Path.Combine(AirLibPath, "deps", LibName, "include"));
         }
 
         Definitions.Add(string.Format("WITH_" + LibName.ToUpper() + "_BINDING={0}", isLibrarySupported ? 1 : 0));

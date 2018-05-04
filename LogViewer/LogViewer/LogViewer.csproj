@@ -9,13 +9,14 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>LogViewer</RootNamespace>
     <AssemblyName>Px4LogViewer</AssemblyName>
-    <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.6.1</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <ProjectTypeGuids>{60dc8134-eba5-43b8-bcc9-bb4bc16c2548};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
     <WarningLevel>4</WarningLevel>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <IsWebBootstrapper>true</IsWebBootstrapper>
-    <PublishUrl>ftp://www.lovettsoftware.com/LovettSoftware/Downloads/Px4LogViewer/</PublishUrl>
+    <TargetFrameworkProfile />
+    <PublishUrl>ftp://lovettsoftware.com/lovettsoftware.com/Downloads/Px4LogViewer/</PublishUrl>
     <Install>true</Install>
     <InstallFrom>Web</InstallFrom>
     <UpdateEnabled>true</UpdateEnabled>
@@ -25,14 +26,14 @@
     <UpdatePeriodically>false</UpdatePeriodically>
     <UpdateRequired>false</UpdateRequired>
     <MapFileExtensions>true</MapFileExtensions>
-    <InstallUrl>http://www.lovettsoftware.com/Downloads/Px4LogViewer/</InstallUrl>
+    <InstallUrl>http://lovettsoftware.com/Downloads/Px4LogViewer/</InstallUrl>
     <SupportUrl>http://www.lovettsoftware.com</SupportUrl>
     <ProductName>PX4 Log Viewer</ProductName>
     <PublisherName>Lovett Software</PublisherName>
     <SuiteName>PX4 Log Viewer</SuiteName>
     <CreateWebPageOnPublish>true</CreateWebPageOnPublish>
     <WebPage>publish.htm</WebPage>
-    <ApplicationRevision>25</ApplicationRevision>
+    <ApplicationRevision>46</ApplicationRevision>
     <ApplicationVersion>1.0.0.%2a</ApplicationVersion>
     <UseApplicationTrust>false</UseApplicationTrust>
     <PublishWizardCompleted>true</PublishWizardCompleted>
@@ -67,7 +68,7 @@
     <AssemblyOriginatorKeyFile>$(MyKeyFile)</AssemblyOriginatorKeyFile>
   </PropertyGroup>
   <PropertyGroup>
-    <ManifestCertificateThumbprint>235CA38984188F94FC230E1DAED8482975D38CFF</ManifestCertificateThumbprint>
+    <ManifestCertificateThumbprint>AFFF93C9E6AD77B2519D1778A820B789F9F1E31D</ManifestCertificateThumbprint>
   </PropertyGroup>
   <PropertyGroup>
     <ApplicationIcon>Graph.ico</ApplicationIcon>
@@ -81,6 +82,10 @@
   <ItemGroup>
     <Reference Include="Microsoft.Maps.MapControl.WPF, Version=1.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
       <HintPath>..\packages\Microsoft.Maps.MapControl.WPF.1.0.0.3\lib\net40-Client\Microsoft.Maps.MapControl.WPF.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="Newtonsoft.Json, Version=9.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+      <HintPath>..\packages\Newtonsoft.Json.9.0.1\lib\net45\Newtonsoft.Json.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="System" />
@@ -106,6 +111,10 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
+    <Compile Include="Controls\AppSettings.xaml.cs">
+      <DependentUpon>AppSettings.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Controls\ChartGroup.cs" />
     <Compile Include="Controls\CloseBox.xaml.cs">
       <DependentUpon>CloseBox.xaml</DependentUpon>
     </Compile>
@@ -133,12 +142,15 @@
     <Compile Include="Gestures\Extensions3D.cs" />
     <Compile Include="Gestures\IMouseGesture.cs" />
     <Compile Include="Gestures\RotateGesture3D.cs" />
-    <Compile Include="Model\CategoryItem.cs" />
+    <Compile Include="Model\KmlDataLog.cs" />
+    <Compile Include="Model\LogItemSchema.cs" />
     <Compile Include="Model\ChartModels.cs" />
     <Compile Include="Model\CsvDataLog.cs" />
     <Compile Include="Model\IDataLog.cs" />
+    <Compile Include="Model\JSonDataLog.cs" />
     <Compile Include="Model\MavlinkLog.cs" />
     <Compile Include="Model\Px4DataLog.cs" />
+    <Compile Include="Model\Px4ULog.cs" />
     <Compile Include="Utilities\ColorExtensions.cs" />
     <Compile Include="Utilities\DelayedAction.cs" />
     <Compile Include="Utilities\Generated.cs" />
@@ -154,6 +166,10 @@
     <Compile Include="Utilities\UiDispatcher.cs" />
     <Compile Include="Utilities\XamlExtensions.cs" />
     <Compile Include="Utilities\XmlCsvReader.cs" />
+    <Page Include="Controls\AppSettings.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Include="Controls\CloseBox.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>

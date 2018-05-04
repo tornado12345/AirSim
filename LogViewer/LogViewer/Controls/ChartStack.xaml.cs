@@ -16,7 +16,7 @@ using System.Windows.Shapes;
 namespace LogViewer.Controls
 {
     /// <summary>
-    /// Interaction logic for SelectionOverlay.xaml
+    /// Represents a vertical stack of charts or chartgroups
     /// </summary>
     public partial class ChartStack : Grid
     {
@@ -28,7 +28,7 @@ namespace LogViewer.Controls
         private Point mouseDownPos;
         private int mouseDownTime;
 
-        internal void AddChartGroup(Grid chartGroup)
+        internal void AddChartGroup(ChartGroup chartGroup)
         {
             theStack.Children.Add(chartGroup);
         }
@@ -38,76 +38,27 @@ namespace LogViewer.Controls
             theStack.Children.Add(chart);
         }
 
-        internal void AddToGroup(Grid chartGroup, FrameworkElement chart)
-        {
-            chartGroup.Children.Add(chart);
-
-            if (chartGroup.Parent == null)
-            {
-                this.AddChartGroup(chartGroup);
-            }
-
-            FixNextPointers(chartGroup);
-        }
-
-
         public void RemoveChart(SimpleLineChart e)
         {
             if (e.Parent == theStack)
             {
                 theStack.Children.Remove(e);
             }
-            else if (e.Parent is Grid)
+            else if (e.Parent is ChartGroup)
             {
                 // it's a chart group then.
-                Grid group = (Grid)e.Parent;
+                ChartGroup group = (ChartGroup)e.Parent;
                 group.Children.Remove(e);
                 SimpleLineChart chart = e as SimpleLineChart;
                 if (chart != null)
                 {
-                    chart.Next = null;
+                    chart.Group = null;
                 }
                 if (group.Children.Count == 0)
                 {
                     theStack.Children.Remove(group);
                 }
-                else
-                {
-                    FixNextPointers(group);
-                }
-            }
-        }
-
-        private static void FixNextPointers(Grid group)
-        {
-            // fix up the "next" pointers for removed chart.
-            SimpleLineChart first = null;
-            SimpleLineChart previous = null;
-            foreach (UIElement f in group.Children)
-            {
-                SimpleLineChart chart = f as SimpleLineChart;
-                if (chart != null)
-                {
-                    if (first == null)
-                    {
-                        first = chart;
-                        chart.Next = null;
-                    }
-                    else
-                    {
-                        previous.Next = chart;
-                        chart.Next = first;
-                    }
-                    previous = chart;
-                }
-            }
-            foreach (UIElement f in group.Children)
-            {
-                SimpleLineChart chart = f as SimpleLineChart;
-                if (chart != null)
-                {
-                    chart.InvalidateArrange();
-                }
+                group.InvalidateCharts();
             }
         }
 
@@ -124,6 +75,15 @@ namespace LogViewer.Controls
 
         public UIElementCollection Charts {  get { return theStack.Children; } }
 
+        protected override void OnKeyDown(KeyEventArgs e)
+        {
+            if (e.Key == Key.Escape)
+            {
+                selecting = false;
+                Selection.Visibility = Visibility.Collapsed;
+                e.Handled = true;
+            }
+        }
 
         protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
         {
@@ -134,6 +94,7 @@ namespace LogViewer.Controls
             Selection.Width = 1;
             Selection.Height = this.ActualHeight;
             Selection.Margin = new Thickness(pos.X, 0, 0, 0);
+            Focus();
             this.CaptureMouse();
             base.OnMouseLeftButtonDown(e);
         }
@@ -182,16 +143,12 @@ namespace LogViewer.Controls
                 {
                     yield return chart;
                 }
-                Grid group = e as Grid;
+                ChartGroup group = e as ChartGroup;
                 if (group != null)
                 {
-                    foreach (UIElement f in Snapshot(group.Children))
+                    foreach (SimpleLineChart child in group.FindCharts())
                     {
-                        chart = f as SimpleLineChart;
-                        if (chart != null)
-                        {
-                            yield return chart;
-                        }
+                        yield return child;
                     }
                 }
             }
@@ -203,7 +160,13 @@ namespace LogViewer.Controls
             {
                 chart.ZoomTo(x, width);
             }
+            if (ZoomChanged != null)
+            {
+                ZoomChanged(this, EventArgs.Empty);
+            }
         }
+
+        public event EventHandler ZoomChanged;
 
         protected override void OnMouseMove(MouseEventArgs e)
         {

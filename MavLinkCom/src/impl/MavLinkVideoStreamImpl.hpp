@@ -13,7 +13,7 @@ namespace mavlinkcom_impl {
 	class MavLinkVideoClientImpl : public MavLinkNodeImpl
 	{
 	public:
-		MavLinkVideoClientImpl(int local_system_id, int local_component_id);
+		MavLinkVideoClientImpl(int localSystemId, int localComponentId);
 		~MavLinkVideoClientImpl();
 
 		//image APIs
@@ -39,7 +39,7 @@ namespace mavlinkcom_impl {
 			int width;             ///< Width of the image stream
 			int height;            ///< Width of the image stream
 			std::vector<uint8_t> data;  ///< Buffer for the incoming bytestream
-			uint64_t start;			//time when we started recieving data
+			uint64_t start;			//time when we started receiving data
 
 			void ready()
 			{
@@ -88,7 +88,7 @@ namespace mavlinkcom_impl {
 	class MavLinkVideoServerImpl : public MavLinkNodeImpl
 	{
 	public:
-		MavLinkVideoServerImpl(int local_system_id, int local_component_id);
+		MavLinkVideoServerImpl(int localSystemId, int localComponentId);
 		~MavLinkVideoServerImpl();
 
 		bool hasVideoRequest(MavLinkVideoServer::MavLinkVideoRequest& req);

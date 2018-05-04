@@ -1,6 +1,5 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
-
 #ifndef MavLinkCom_MavLinkMessages_hpp
 #define MavLinkCom_MavLinkMessages_hpp
 
@@ -133,6 +132,7 @@ enum class MavLinkMessageIds {
     MAVLINK_MSG_ID_WIND_COV = 231,
     MAVLINK_MSG_ID_GPS_INPUT = 232,
     MAVLINK_MSG_ID_GPS_RTCM_DATA = 233,
+    MAVLINK_MSG_ID_HIGH_LATENCY = 234,
     MAVLINK_MSG_ID_VIBRATION = 241,
     MAVLINK_MSG_ID_HOME_POSITION = 242,
     MAVLINK_MSG_ID_SET_HOME_POSITION = 243,
@@ -219,11 +219,11 @@ enum class MAV_TYPE {
     MAV_TYPE_HEXAROTOR = 13,
     // Octorotor
     MAV_TYPE_OCTOROTOR = 14,
-    // Octorotor
+    // Tricopter
     MAV_TYPE_TRICOPTER = 15,
     // Flapping wing
     MAV_TYPE_FLAPPING_WING = 16,
-    // Flapping wing
+    // Kite
     MAV_TYPE_KITE = 17,
     // Onboard companion controller
     MAV_TYPE_ONBOARD_CONTROLLER = 18,
@@ -266,7 +266,9 @@ enum class FIRMWARE_VERSION_TYPE {
 // These flags encode the MAV mode.
 enum class MAV_MODE_FLAG {
     // 0b10000000 MAV safety set to armed. Motors are enabled / running / can start.
-    // Ready to fly.
+    // Ready to fly. Additional note: this flag is to be ignore when sent in the command
+    // MAV_CMD_DO_SET_MODE and MAV_CMD_COMPONENT_ARM_DISARM shall be used instead.
+    // The flag can still be used to report the armed state.
     MAV_MODE_FLAG_SAFETY_ARMED = 128,
     // 0b01000000 remote control input is enabled.
     MAV_MODE_FLAG_MANUAL_INPUT_ENABLED = 64,
@@ -702,6 +704,8 @@ enum class MAV_CMD {
     MAV_CMD_DO_MOTOR_TEST = 209,
     // Change to/from inverted flight
     MAV_CMD_DO_INVERTED_FLIGHT = 210,
+    // Sets a desired vehicle turn angle and thrust change
+    MAV_CMD_DO_SET_POSITION_YAW_THRUST = 213,
     // Mission command to control a camera or antenna mount, using a quaternion as
     // reference.
     MAV_CMD_DO_MOUNT_CONTROL_QUAT = 220,
@@ -745,6 +749,22 @@ enum class MAV_CMD {
     MAV_CMD_SET_MESSAGE_INTERVAL = 511,
     // Request autopilot capabilities
     MAV_CMD_REQUEST_AUTOPILOT_CAPABILITIES = 520,
+    // WIP: Request camera information (CAMERA_INFORMATION)
+    MAV_CMD_REQUEST_CAMERA_INFORMATION = 521,
+    // WIP: Request camera settings (CAMERA_SETTINGS)
+    MAV_CMD_REQUEST_CAMERA_SETTINGS = 522,
+    // WIP: Set the camera settings part 1 (CAMERA_SETTINGS)
+    MAV_CMD_SET_CAMERA_SETTINGS_1 = 523,
+    // WIP: Set the camera settings part 2 (CAMERA_SETTINGS)
+    MAV_CMD_SET_CAMERA_SETTINGS_2 = 524,
+    // WIP: Request storage information (STORAGE_INFORMATION)
+    MAV_CMD_REQUEST_STORAGE_INFORMATION = 525,
+    // WIP: Format a storage medium
+    MAV_CMD_STORAGE_FORMAT = 526,
+    // WIP: Request camera capture status (CAMERA_CAPTURE_STATUS)
+    MAV_CMD_REQUEST_CAMERA_CAPTURE_STATUS = 527,
+    // WIP: Request flight information (FLIGHT_INFORMATION)
+    MAV_CMD_REQUEST_FLIGHT_INFORMATION = 528,
     // Start image capture sequence
     MAV_CMD_IMAGE_START_CAPTURE = 2000,
     // Stop image capture sequence
@@ -755,6 +775,12 @@ enum class MAV_CMD {
     MAV_CMD_VIDEO_START_CAPTURE = 2500,
     // Stop the current video capture
     MAV_CMD_VIDEO_STOP_CAPTURE = 2501,
+    // Request to start streaming logging data over MAVLink (see also LOGGING_DATA
+    // message)
+    MAV_CMD_LOGGING_START = 2510,
+    // Request to stop streaming log data over MAVLink
+    MAV_CMD_LOGGING_STOP = 2511,
+    MAV_CMD_AIRFRAME_CONFIGURATION = 2520,
     // Create a panorama at the current position
     MAV_CMD_PANORAMA_CREATE = 2800,
     // Request VTOL transition
@@ -1365,6 +1391,26 @@ enum class MAV_COLLISION_SRC {
     MAV_COLLISION_SRC_MAVLINK_GPS_GLOBAL_INT = 1
 };
 
+// Type of GPS fix
+enum class GPS_FIX_TYPE {
+    // No GPS connected
+    GPS_FIX_TYPE_NO_GPS = 0,
+    // No position information, GPS is connected
+    GPS_FIX_TYPE_NO_FIX = 1,
+    // 2D position
+    GPS_FIX_TYPE_2D_FIX = 2,
+    // 3D position
+    GPS_FIX_TYPE_3D_FIX = 3,
+    // DGPS/SBAS aided 3D position
+    GPS_FIX_TYPE_DGPS = 4,
+    // RTK float, 3D position
+    GPS_FIX_TYPE_RTK_FLOAT = 5,
+    // RTK Fixed, 3D position
+    GPS_FIX_TYPE_RTK_FIXED = 6,
+    // Static fixed, typically used for base stations
+    GPS_FIX_TYPE_STATIC = 7
+};
+
 // The heartbeat message shows that a system is present and responding. The type of
 // the MAV and Autopilot hardware allow the receiving system to treat further messages
 // from this system appropriate (e.g. by laying out the user interface based on the
@@ -1387,6 +1433,7 @@ public:
     // MAVLink version, not writable by user, gets added by protocol because of magic
     // data type: uint8_t_mavlink_version
     uint8_t mavlink_version = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -1444,6 +1491,7 @@ public:
     // Remaining battery energy: (0%: 0, 100%: 100), -1: autopilot estimate the remaining
     // battery
     int8_t battery_remaining = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -1459,6 +1507,7 @@ public:
     uint64_t time_unix_usec = 0;
     // Timestamp of the component clock since boot time in milliseconds.
     uint32_t time_boot_ms = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -1481,6 +1530,7 @@ public:
     // 0: request ping from all receiving components, if greater than 0: message is
     // a ping response and number is the system id of the requesting system
     uint8_t target_component = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -1503,6 +1553,7 @@ public:
     // Password / Key, depending on version plaintext or encrypted. 25 or less characters,
     // NULL terminated. The characters may involve A-Z, a-z, 0-9, and "!?,.-"
     char passkey[25] = { 0 };
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -1520,6 +1571,7 @@ public:
     // 0: ACK, 1: NACK: Wrong passkey, 2: NACK: Unsupported passkey encryption method,
     // 3: NACK: Already under control
     uint8_t ack = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -1534,6 +1586,7 @@ public:
     MavLinkAuthKey() { msgid = kMessageId; }
     // key
     char key[32] = { 0 };
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -1552,6 +1605,7 @@ public:
     uint8_t target_system = 0;
     // The new base mode
     uint8_t base_mode = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -1579,6 +1633,7 @@ public:
     // chars - applications have to provide 16+1 bytes storage if the ID is stored
     // as string
     char param_id[16] = { 0 };
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -1594,6 +1649,7 @@ public:
     uint8_t target_system = 0;
     // Component ID
     uint8_t target_component = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -1619,6 +1675,7 @@ public:
     char param_id[16] = { 0 };
     // Onboard parameter type: see the MAV_PARAM_TYPE enum for supported data types.
     uint8_t param_type = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -1648,6 +1705,7 @@ public:
     char param_id[16] = { 0 };
     // Onboard parameter type: see the MAV_PARAM_TYPE enum for supported data types.
     uint8_t param_type = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -1679,12 +1737,11 @@ public:
     // Course over ground (NOT heading, but direction of movement) in degrees * 100,
     // 0.0..359.99 degrees. If unknown, set to: UINT16_MAX
     uint16_t cog = 0;
-    // 0-1: no fix, 2: 2D fix, 3: 3D fix, 4: DGPS, 5: RTK. Some applications will
-    // not use the value of this field unless it is at least two, so always correctly
-    // fill in the fix.
+    // See the GPS_FIX_TYPE enum.
     uint8_t fix_type = 0;
     // Number of satellites visible. If unknown, set to 255
     uint8_t satellites_visible = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -1710,6 +1767,7 @@ public:
     uint8_t satellite_azimuth[20] = { 0 };
     // Signal to noise ratio of satellite
     uint8_t satellite_snr[20] = { 0 };
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -1741,6 +1799,7 @@ public:
     int16_t ymag = 0;
     // Z Magnetic field (milli tesla)
     int16_t zmag = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -1773,6 +1832,7 @@ public:
     int16_t ymag = 0;
     // Z Magnetic field (raw)
     int16_t zmag = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -1795,6 +1855,7 @@ public:
     int16_t press_diff2 = 0;
     // Raw Temperature measurement (raw)
     int16_t temperature = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -1814,6 +1875,7 @@ public:
     float press_diff = 0;
     // Temperature measurement (0.01 degrees celsius)
     int16_t temperature = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -1838,6 +1900,7 @@ public:
     float pitchspeed = 0;
     // Yaw angular speed (rad/s)
     float yawspeed = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -1866,6 +1929,7 @@ public:
     float pitchspeed = 0;
     // Yaw angular speed (rad/s)
     float yawspeed = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -1891,6 +1955,7 @@ public:
     float vy = 0;
     // Z Speed
     float vz = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -1923,6 +1988,7 @@ public:
     // Vehicle heading (yaw angle) in degrees * 100, 0.0..359.99 degrees. If unknown,
     // set to: UINT16_MAX
     uint16_t hdg = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -1965,6 +2031,7 @@ public:
     uint8_t port = 0;
     // Receive signal strength indicator, 0: 0%, 100: 100%, 255: invalid/unknown.
     uint8_t rssi = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -2008,6 +2075,7 @@ public:
     uint8_t port = 0;
     // Receive signal strength indicator, 0: 0%, 100: 100%, 255: invalid/unknown.
     uint8_t rssi = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -2057,6 +2125,7 @@ public:
     // Servo output port (set of 8 outputs = 1 port). Most MAVs will just use one,
     // but this allows to encode more than 8 servos.
     uint8_t port = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -2077,6 +2146,7 @@ public:
     uint8_t target_system = 0;
     // Component ID
     uint8_t target_component = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -2098,6 +2168,7 @@ public:
     uint8_t target_system = 0;
     // Component ID
     uint8_t target_component = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -2140,6 +2211,7 @@ public:
     uint8_t current = 0;
     // autocontinue to next wp
     uint8_t autocontinue = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -2157,6 +2229,7 @@ public:
     uint8_t target_system = 0;
     // Component ID
     uint8_t target_component = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -2175,6 +2248,7 @@ public:
     uint8_t target_system = 0;
     // Component ID
     uint8_t target_component = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -2188,6 +2262,7 @@ public:
     MavLinkMissionCurrent() { msgid = kMessageId; }
     // Sequence
     uint16_t seq = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -2202,6 +2277,7 @@ public:
     uint8_t target_system = 0;
     // Component ID
     uint8_t target_component = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -2220,6 +2296,7 @@ public:
     uint8_t target_system = 0;
     // Component ID
     uint8_t target_component = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -2234,6 +2311,7 @@ public:
     uint8_t target_system = 0;
     // Component ID
     uint8_t target_component = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -2248,6 +2326,7 @@ public:
     MavLinkMissionItemReached() { msgid = kMessageId; }
     // Sequence
     uint16_t seq = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -2265,6 +2344,7 @@ public:
     uint8_t target_component = 0;
     // See MAV_MISSION_RESULT enum
     uint8_t type = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -2286,6 +2366,7 @@ public:
     int32_t altitude = 0;
     // System ID
     uint8_t target_system = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -2303,6 +2384,7 @@ public:
     int32_t longitude = 0;
     // Altitude (AMSL), in meters * 1000 (positive for up)
     int32_t altitude = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -2339,6 +2421,7 @@ public:
     // Index of parameter RC channel. Not equal to the RC channel id. Typically correpsonds
     // to a potentiometer-knob on the RC.
     uint8_t parameter_rc_channel_index = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -2356,6 +2439,7 @@ public:
     uint8_t target_system = 0;
     // Component ID
     uint8_t target_component = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -2387,6 +2471,7 @@ public:
     // Coordinate frame, as defined by MAV_FRAME enum in mavlink_types.h. Can be either
     // global, GPS, right-handed with Z axis up or local, right handed, Z axis down.
     uint8_t frame = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -2412,6 +2497,7 @@ public:
     // Coordinate frame, as defined by MAV_FRAME enum in mavlink_types.h. Can be either
     // global, GPS, right-handed with Z axis up or local, right handed, Z axis down.
     uint8_t frame = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -2424,8 +2510,8 @@ class MavLinkAttitudeQuaternionCov : public MavLinkMessageBase {
 public:
     const static uint8_t kMessageId = 61;
     MavLinkAttitudeQuaternionCov() { msgid = kMessageId; }
-    // Timestamp (milliseconds since system boot)
-    uint32_t time_boot_ms = 0;
+    // Timestamp (microseconds since system boot or since UNIX epoch)
+    uint64_t time_usec = 0;
     // Quaternion components, w, x, y, z (1 0 0 0 is the null-rotation)
     float q[4] = { 0 };
     // Roll angular speed (rad/s)
@@ -2436,6 +2522,7 @@ public:
     float yawspeed = 0;
     // Attitude covariance
     float covariance[9] = { 0 };
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -2462,6 +2549,7 @@ public:
     int16_t target_bearing = 0;
     // Distance to active MISSION in meters
     uint16_t wp_dist = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -2477,11 +2565,8 @@ class MavLinkGlobalPositionIntCov : public MavLinkMessageBase {
 public:
     const static uint8_t kMessageId = 63;
     MavLinkGlobalPositionIntCov() { msgid = kMessageId; }
-    // Timestamp (microseconds since UNIX epoch) in UTC. 0 for unknown. Commonly filled
-    // by the precision time source of a GPS receiver.
-    uint64_t time_utc = 0;
-    // Timestamp (milliseconds since system boot)
-    uint32_t time_boot_ms = 0;
+    // Timestamp (microseconds since system boot or since UNIX epoch)
+    uint64_t time_usec = 0;
     // Latitude, expressed as degrees * 1E7
     int32_t lat = 0;
     // Longitude, expressed as degrees * 1E7
@@ -2501,6 +2586,7 @@ public:
     float covariance[36] = { 0 };
     // Class id of the estimator this estimate originated from.
     uint8_t estimator_type = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -2512,12 +2598,8 @@ class MavLinkLocalPositionNedCov : public MavLinkMessageBase {
 public:
     const static uint8_t kMessageId = 64;
     MavLinkLocalPositionNedCov() { msgid = kMessageId; }
-    // Timestamp (microseconds since UNIX epoch) in UTC. 0 for unknown. Commonly filled
-    // by the precision time source of a GPS receiver.
-    uint64_t time_utc = 0;
-    // Timestamp (milliseconds since system boot). 0 for system without monotonic
-    // timestamp
-    uint32_t time_boot_ms = 0;
+    // Timestamp (microseconds since system boot or since UNIX epoch)
+    uint64_t time_usec = 0;
     // X Position
     float x = 0;
     // Y Position
@@ -2541,6 +2623,7 @@ public:
     float covariance[45] = { 0 };
     // Class id of the estimator this estimate originated from.
     uint8_t estimator_type = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -2615,6 +2698,7 @@ public:
     uint8_t chancount = 0;
     // Receive signal strength indicator, 0: 0%, 100: 100%, 255: invalid/unknown.
     uint8_t rssi = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -2635,6 +2719,7 @@ public:
     uint8_t req_stream_id = 0;
     // 1 to start sending, 0 to stop sending.
     uint8_t start_stop = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -2651,6 +2736,7 @@ public:
     uint8_t stream_id = 0;
     // 1 stream is enabled, 0 stream is stopped.
     uint8_t on_off = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -2687,6 +2773,7 @@ public:
     uint16_t buttons = 0;
     // The system to be controlled.
     uint8_t target = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -2729,6 +2816,7 @@ public:
     uint8_t target_system = 0;
     // Component ID
     uint8_t target_component = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -2773,6 +2861,7 @@ public:
     uint8_t current = 0;
     // autocontinue to next wp
     uint8_t autocontinue = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -2795,6 +2884,7 @@ public:
     int16_t heading = 0;
     // Current throttle setting in integer percent, 0 to 100
     uint16_t throttle = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -2835,6 +2925,7 @@ public:
     uint8_t current = 0;
     // autocontinue to next wp
     uint8_t autocontinue = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -2868,6 +2959,7 @@ public:
     // 0: First transmission of this command. 1-255: Confirmation transmissions (e.g.
     // for kill command)
     uint8_t confirmation = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -2882,6 +2974,7 @@ public:
     uint16_t command = 0;
     // See MAV_RESULT enum
     uint8_t result = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -2906,6 +2999,7 @@ public:
     uint8_t mode_switch = 0;
     // Override mode switch position, 0.. 255
     uint8_t manual_override_switch = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -2938,6 +3032,7 @@ public:
     // bit 1: body roll rate, bit 2: body pitch rate, bit 3: body yaw rate. bit 4-bit
     // 6: reserved, bit 7: throttle, bit 8: attitude
     uint8_t type_mask = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -2967,6 +3062,7 @@ public:
     // bit 1: body roll rate, bit 2: body pitch rate, bit 3: body yaw rate. bit 4-bit
     // 7: reserved, bit 8: attitude
     uint8_t type_mask = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -3019,6 +3115,7 @@ public:
     // Valid options are: MAV_FRAME_LOCAL_NED = 1, MAV_FRAME_LOCAL_OFFSET_NED = 7,
     // MAV_FRAME_BODY_NED = 8, MAV_FRAME_BODY_OFFSET_NED = 9
     uint8_t coordinate_frame = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -3068,6 +3165,7 @@ public:
     // Valid options are: MAV_FRAME_LOCAL_NED = 1, MAV_FRAME_LOCAL_OFFSET_NED = 7,
     // MAV_FRAME_BODY_NED = 8, MAV_FRAME_BODY_OFFSET_NED = 9
     uint8_t coordinate_frame = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -3124,6 +3222,7 @@ public:
     // Valid options are: MAV_FRAME_GLOBAL_INT = 5, MAV_FRAME_GLOBAL_RELATIVE_ALT_INT
     // = 6, MAV_FRAME_GLOBAL_TERRAIN_ALT_INT = 11
     uint8_t coordinate_frame = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -3176,6 +3275,7 @@ public:
     // Valid options are: MAV_FRAME_GLOBAL_INT = 5, MAV_FRAME_GLOBAL_RELATIVE_ALT_INT
     // = 6, MAV_FRAME_GLOBAL_TERRAIN_ALT_INT = 11
     uint8_t coordinate_frame = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -3202,6 +3302,7 @@ public:
     float pitch = 0;
     // Yaw
     float yaw = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -3247,6 +3348,7 @@ public:
     int16_t yacc = 0;
     // Z acceleration (mg)
     int16_t zacc = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -3279,6 +3381,7 @@ public:
     uint8_t mode = 0;
     // Navigation mode (MAV_NAV_MODE)
     uint8_t nav_mode = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -3319,6 +3422,7 @@ public:
     uint16_t chan12_raw = 0;
     // Receive signal strength indicator, 0: 0%, 255: 100%
     uint8_t rssi = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -3338,6 +3442,7 @@ public:
     float controls[16] = { 0 };
     // System mode (MAV_MODE), includes arming state.
     uint8_t mode = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -3365,6 +3470,7 @@ public:
     uint8_t sensor_id = 0;
     // Optical flow quality / confidence. 0: bad, 255: maximum quality
     uint8_t quality = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -3388,6 +3494,7 @@ public:
     float pitch = 0;
     // Yaw angle in rad
     float yaw = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -3411,6 +3518,7 @@ public:
     float pitch = 0;
     // Yaw angle in rad
     float yaw = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -3428,6 +3536,7 @@ public:
     float y = 0;
     // Global Z speed
     float z = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -3451,6 +3560,7 @@ public:
     float pitch = 0;
     // Yaw angle in rad
     float yaw = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -3492,6 +3602,7 @@ public:
     // Bitmask for fields that have updated since last message, bit 0 = xacc, bit
     // 12: temperature
     uint16_t fields_updated = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -3533,6 +3644,7 @@ public:
     uint8_t sensor_id = 0;
     // Optical flow quality / confidence. 0: no valid flow, 255: maximum quality
     uint8_t quality = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -3575,6 +3687,7 @@ public:
     // 12: temperature, bit 31: full reset of attitude/position/velocities/etc was
     // performed in sim.
     uint32_t fields_updated = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -3630,6 +3743,7 @@ public:
     float ve = 0;
     // True velocity in m/s in DOWN direction in earth-fixed NED frame
     float vd = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -3654,6 +3768,7 @@ public:
     uint8_t noise = 0;
     // Remote background noise level
     uint8_t remnoise = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -3676,6 +3791,7 @@ public:
     // encoding used can be extension specific and might not always be documented
     // as part of the mavlink specification.
     uint8_t payload[251] = { 0 };
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -3690,6 +3806,7 @@ public:
     int64_t tc1 = 0;
     // Time sync timestamp 2
     int64_t ts1 = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -3704,6 +3821,7 @@ public:
     uint64_t time_usec = 0;
     // Image frame sequence
     uint32_t seq = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -3746,6 +3864,7 @@ public:
     uint8_t fix_type = 0;
     // Number of satellites visible. If unknown, set to 255
     uint8_t satellites_visible = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -3787,6 +3906,7 @@ public:
     uint8_t sensor_id = 0;
     // Optical flow quality / confidence. 0: no valid flow, 255: maximum quality
     uint8_t quality = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -3832,6 +3952,7 @@ public:
     int16_t yacc = 0;
     // Z acceleration (mg)
     int16_t zacc = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -3863,6 +3984,7 @@ public:
     int16_t ymag = 0;
     // Z Magnetic field (milli tesla)
     int16_t zmag = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -3882,6 +4004,7 @@ public:
     uint8_t target_system = 0;
     // Component ID
     uint8_t target_component = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -3902,6 +4025,7 @@ public:
     uint16_t num_logs = 0;
     // High log number
     uint16_t last_log_num = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -3922,6 +4046,7 @@ public:
     uint8_t target_system = 0;
     // Component ID
     uint8_t target_component = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -3940,6 +4065,7 @@ public:
     uint8_t count = 0;
     // log data
     uint8_t data[90] = { 0 };
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -3954,6 +4080,7 @@ public:
     uint8_t target_system = 0;
     // Component ID
     uint8_t target_component = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -3968,6 +4095,7 @@ public:
     uint8_t target_system = 0;
     // Component ID
     uint8_t target_component = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -3986,6 +4114,7 @@ public:
     uint8_t len = 0;
     // raw data (110 is enough for 12 satellites of RTCMv2)
     uint8_t data[110] = { 0 };
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -4016,14 +4145,13 @@ public:
     // Course over ground (NOT heading, but direction of movement) in degrees * 100,
     // 0.0..359.99 degrees. If unknown, set to: UINT16_MAX
     uint16_t cog = 0;
-    // 0-1: no fix, 2: 2D fix, 3: 3D fix, 4: DGPS fix, 5: RTK Fix. Some applications
-    // will not use the value of this field unless it is at least two, so always correctly
-    // fill in the fix.
+    // See the GPS_FIX_TYPE enum.
     uint8_t fix_type = 0;
     // Number of satellites visible. If unknown, set to 255
     uint8_t satellites_visible = 0;
     // Number of DGPS satellites
     uint8_t dgps_numch = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -4040,6 +4168,7 @@ public:
     uint16_t Vservo = 0;
     // power supply status flags (see MAV_POWER_STATUS enum)
     uint16_t flags = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -4065,6 +4194,7 @@ public:
     uint8_t count = 0;
     // serial data
     uint8_t data[70] = { 0 };
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -4102,6 +4232,7 @@ public:
     uint8_t nsats = 0;
     // Coordinate system of baseline. 0 == ECEF, 1 == NED
     uint8_t baseline_coords_type = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -4139,6 +4270,7 @@ public:
     uint8_t nsats = 0;
     // Coordinate system of baseline. 0 == ECEF, 1 == NED
     uint8_t baseline_coords_type = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -4170,6 +4302,7 @@ public:
     int16_t ymag = 0;
     // Z Magnetic field (milli tesla)
     int16_t zmag = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -4194,6 +4327,7 @@ public:
     uint8_t payload = 0;
     // JPEG quality out of [1,100]
     uint8_t jpg_quality = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -4207,6 +4341,7 @@ public:
     uint16_t seqnr = 0;
     // image data bytes
     uint8_t data[253] = { 0 };
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -4232,6 +4367,7 @@ public:
     uint8_t orientation = 0;
     // Measurement covariance in centimeters, 0 for unknown / invalid readings
     uint8_t covariance = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -4250,6 +4386,7 @@ public:
     int32_t lon = 0;
     // Grid spacing in meters
     uint16_t grid_spacing = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -4271,6 +4408,7 @@ public:
     int16_t data[16] = { 0 };
     // bit within the terrain request mask
     uint8_t gridbit = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -4286,6 +4424,7 @@ public:
     int32_t lat = 0;
     // Longitude (degrees *10^7)
     int32_t lon = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -4310,6 +4449,7 @@ public:
     uint16_t pending = 0;
     // Number of 4x4 terrain blocks in memory
     uint16_t loaded = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -4328,6 +4468,7 @@ public:
     float press_diff = 0;
     // Temperature measurement (0.01 degrees celsius)
     int16_t temperature = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -4348,6 +4489,7 @@ public:
     float y = 0;
     // Z position in meters (NED)
     float z = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -4373,6 +4515,7 @@ public:
     uint8_t target_system = 0;
     // Component ID
     uint8_t target_component = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -4394,6 +4537,7 @@ public:
     // Actuator group. The "_mlx" indicates this is a multi-instance message and a
     // MAVLink parser should use this field to difference between instances.
     uint8_t group_mlx = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -4432,6 +4576,7 @@ public:
     // of e.g. the laser altimeter. It is generally a moving target. A negative value
     // indicates no measurement available.
     float bottom_clearance = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -4455,6 +4600,7 @@ public:
     // The storage path the autopilot wants the URI to be stored in. Will only be
     // valid if the transfer_type has a storage associated (e.g. MAVLink FTP).
     uint8_t storage[120] = { 0 };
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -4473,6 +4619,7 @@ public:
     float press_diff = 0;
     // Temperature measurement (0.01 degrees celsius)
     int16_t temperature = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -4506,6 +4653,7 @@ public:
     // bit positions for tracker reporting capabilities (POS = 0, VEL = 1, ACCEL =
     // 2, ATT + RATES = 3)
     uint8_t est_capabilities = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -4550,6 +4698,7 @@ public:
     float pitch_rate = 0;
     // Angular rate in yaw axis
     float yaw_rate = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -4584,6 +4733,7 @@ public:
     // Remaining battery energy: (0%: 0, 100%: 100), -1: autopilot does not estimate
     // the remaining battery
     int8_t battery_remaining = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -4622,6 +4772,7 @@ public:
     // an unique identifier, but should allow to identify the commit using the main
     // version number even for very large code bases.
     uint8_t os_custom_version[8] = { 0 };
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -4649,6 +4800,7 @@ public:
     // MAV_FRAME enum specifying the whether the following feilds are earth-frame,
     // body-frame, etc.
     uint8_t frame = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -4689,6 +4841,7 @@ public:
     // Integer bitmask indicating which EKF outputs are valid. See definition for
     // ESTIMATOR_STATUS_FLAGS.
     uint16_t flags = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -4716,6 +4869,7 @@ public:
     float horiz_accuracy = 0;
     // Vertical speed 1-STD accuracy
     float vert_accuracy = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -4764,6 +4918,7 @@ public:
     uint8_t fix_type = 0;
     // Number of satellites visible.
     uint8_t satellites_visible = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -4780,6 +4935,75 @@ public:
     uint8_t len = 0;
     // RTCM message (may be fragmented)
     uint8_t data[180] = { 0 };
+    virtual std::string toJSon();
+protected:
+    virtual int pack(char* buffer) const;
+    virtual int unpack(const char* buffer);
+};
+
+// Message appropriate for high latency connections like Iridium
+class MavLinkHighLatency : public MavLinkMessageBase {
+public:
+    const static uint8_t kMessageId = 234;
+    MavLinkHighLatency() { msgid = kMessageId; }
+    // Timestamp (microseconds since UNIX epoch)
+    uint64_t time_usec = 0;
+    // A bitfield for use for autopilot-specific flags.
+    uint32_t custom_mode = 0;
+    // Latitude, expressed as degrees * 1E7
+    int32_t latitude = 0;
+    // Longitude, expressed as degrees * 1E7
+    int32_t longitude = 0;
+    // roll (centidegrees)
+    int16_t roll = 0;
+    // pitch (centidegrees)
+    int16_t pitch = 0;
+    // heading (centidegrees)
+    uint16_t heading = 0;
+    // roll setpoint (centidegrees)
+    int16_t roll_sp = 0;
+    // pitch setpoint (centidegrees)
+    int16_t pitch_sp = 0;
+    // heading setpoint (centidegrees)
+    int16_t heading_sp = 0;
+    // Altitude above the home position (meters)
+    int16_t altitude_home = 0;
+    // Altitude above mean sea level (meters)
+    int16_t altitude_amsl = 0;
+    // Altitude setpoint relative to the home position (meters)
+    int16_t altitude_sp = 0;
+    // distance to target (meters)
+    uint16_t wp_distance = 0;
+    // System mode bitfield, see MAV_MODE_FLAG ENUM in mavlink/include/mavlink_types.h
+    uint8_t base_mode = 0;
+    // The landed state. Is set to MAV_LANDED_STATE_UNDEFINED if landed state is unknown.
+    uint8_t landed_state = 0;
+    // throttle (percentage)
+    int8_t throttle = 0;
+    // airspeed (m/s)
+    uint8_t airspeed = 0;
+    // airspeed setpoint (m/s)
+    uint8_t airspeed_sp = 0;
+    // groundspeed (m/s)
+    uint8_t groundspeed = 0;
+    // climb rate (m/s)
+    int8_t climb_rate = 0;
+    // Number of satellites visible. If unknown, set to 255
+    uint8_t gps_nsat = 0;
+    // See the GPS_FIX_TYPE enum.
+    uint8_t gps_fix_type = 0;
+    // Remaining battery (percentage)
+    uint8_t battery_remaining = 0;
+    // Autopilot temperature (degrees C)
+    int8_t temperature = 0;
+    // Air temperature (degrees C) from airspeed sensor
+    int8_t temperature_air = 0;
+    // failsafe (each bit represents a failsafe where 0=ok, 1=failsafe active (bit0:RC,
+    // bit1:batt, bit2:GPS, bit3:GCS, bit4:fence)
+    uint8_t failsafe = 0;
+    // current waypoint number
+    uint8_t wp_num = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -4804,6 +5028,7 @@ public:
     uint32_t clipping_1 = 0;
     // third accelerometer clipping count
     uint32_t clipping_2 = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -4856,6 +5081,7 @@ public:
     // should set it to the opposite direction of the takeoff, assuming the takeoff
     // happened from the threshold / touchdown zone.
     float approach_z = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -4908,6 +5134,7 @@ public:
     float approach_z = 0;
     // System ID.
     uint8_t target_system = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -4924,6 +5151,7 @@ public:
     int32_t interval_us = 0;
     // The ID of the requested MAVLink message. v1.0 is limited to 254 messages.
     uint16_t message_id = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -4939,6 +5167,7 @@ public:
     uint8_t vtol_state = 0;
     // The landed state. Is set to MAV_LANDED_STATE_UNDEFINED if landed state is unknown.
     uint8_t landed_state = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -4975,6 +5204,7 @@ public:
     uint8_t emitter_type = 0;
     // Time since last communication in seconds
     uint8_t tslc = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -4999,6 +5229,7 @@ public:
     uint8_t action = 0;
     // How concerned the aircraft is about this collision
     uint8_t threat_level = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -5030,6 +5261,7 @@ public:
     // encoding used can be extension specific and might not always be documented
     // as part of the mavlink specification.
     uint8_t payload[249] = { 0 };
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -5052,6 +5284,7 @@ public:
     uint8_t type = 0;
     // Memory contents at specified address
     int8_t value[32] = { 0 };
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -5071,6 +5304,7 @@ public:
     float z = 0;
     // Name
     char name[10] = { 0 };
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -5089,6 +5323,7 @@ public:
     float value = 0;
     // Name of the debug variable
     char name[10] = { 0 };
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -5107,6 +5342,7 @@ public:
     int32_t value = 0;
     // Name of the debug variable
     char name[10] = { 0 };
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -5124,6 +5360,7 @@ public:
     uint8_t severity = 0;
     // Status text message, without null termination character
     char text[50] = { 0 };
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -5141,6 +5378,7 @@ public:
     float value = 0;
     // index of debug variable
     uint8_t ind = 0;
+    virtual std::string toJSon();
 protected:
     virtual int pack(char* buffer) const;
     virtual int unpack(const char* buffer);
@@ -5997,12 +6235,18 @@ class MavCmdDoMountControl : public MavLinkCommand {
 public:
     const static uint16_t kCommandId = 205;
     MavCmdDoMountControl() { command = kCommandId; }
-    // pitch or lat in degrees, depending on mount mode.
-    float PitchOrLat = 0;
-    // roll or lon in degrees depending on mount mode
-    float RollOrLon = 0;
-    // yaw or alt (in meters) depending on mount mode
-    float YawOrAlt = 0;
+    // pitch (WIP: DEPRECATED: or lat in degrees) depending on mount mode.
+    float Pitch = 0;
+    // roll (WIP: DEPRECATED: or lon in degrees) depending on mount mode.
+    float Roll = 0;
+    // yaw (WIP: DEPRECATED: or alt in meters) depending on mount mode.
+    float Yaw = 0;
+    // WIP: alt in meters depending on mount mode.
+    float Wip = 0;
+    // WIP: latitude in degrees * 1E7, set if appropriate mount mode.
+    float Wip2 = 0;
+    // WIP: longitude in degrees * 1E7, set if appropriate mount mode.
+    float Wip3 = 0;
     // MAV_MOUNT_MODE enum value
     float MavMountModeEnumValue = 0;
 protected:
@@ -6068,6 +6312,19 @@ public:
     MavCmdDoInvertedFlight() { command = kCommandId; }
     // inverted (0=normal, 1=inverted)
     float Inverted = 0;
+protected:
+    virtual void pack();
+    virtual void unpack();
+};
+// Sets a desired vehicle turn angle and thrust change
+class MavCmdDoSetPositionYawThrust : public MavLinkCommand {
+public:
+    const static uint16_t kCommandId = 213;
+    MavCmdDoSetPositionYawThrust() { command = kCommandId; }
+    // yaw angle to adjust steering by in centidegress
+    float YawAngleTo = 0;
+    // Thrust - normalized to -2 .. 2
+    float Thrust = 0;
 protected:
     virtual void pack();
     virtual void unpack();
@@ -6242,6 +6499,14 @@ public:
     // onboard computer, 3: Reboot onboard computer and keep it in the bootloader
     // until upgraded.
     float p02 = 0;
+    // WIP: 0: Do nothing for camera, 1: Reboot onboard camera, 2: Shutdown onboard
+    // camera, 3: Reboot onboard camera and keep it in the bootloader until upgraded
+    float Wip = 0;
+    // WIP: 0: Do nothing for mount (e.g. gimbal), 1: Reboot mount, 2: Shutdown mount,
+    // 3: Reboot mount and keep it in the bootloader until upgraded
+    float Wip2 = 0;
+    // WIP: ID (e.g. camera ID -1 for all IDs)
+    float Wip3 = 0;
 protected:
     virtual void pack();
     virtual void unpack();
@@ -6355,6 +6620,126 @@ protected:
     virtual void pack();
     virtual void unpack();
 };
+// WIP: Request camera information (CAMERA_INFORMATION)
+class MavCmdRequestCameraInformation : public MavLinkCommand {
+public:
+    const static uint16_t kCommandId = 521;
+    MavCmdRequestCameraInformation() { command = kCommandId; }
+    // 1: Request camera capabilities
+    float p1 = 0;
+    // Camera ID
+    float CameraId = 0;
+protected:
+    virtual void pack();
+    virtual void unpack();
+};
+// WIP: Request camera settings (CAMERA_SETTINGS)
+class MavCmdRequestCameraSettings : public MavLinkCommand {
+public:
+    const static uint16_t kCommandId = 522;
+    MavCmdRequestCameraSettings() { command = kCommandId; }
+    // 1: Request camera settings
+    float p1 = 0;
+    // Camera ID
+    float CameraId = 0;
+protected:
+    virtual void pack();
+    virtual void unpack();
+};
+// WIP: Set the camera settings part 1 (CAMERA_SETTINGS)
+class MavCmdSetCameraSettings1 : public MavLinkCommand {
+public:
+    const static uint16_t kCommandId = 523;
+    MavCmdSetCameraSettings1() { command = kCommandId; }
+    // Camera ID
+    float CameraId = 0;
+    // Aperture (1/value)
+    float Aperture = 0;
+    // Aperture locked (0: auto, 1: locked)
+    float ApertureLocked = 0;
+    // Shutter speed in s
+    float ShutterSpeedS = 0;
+    // Shutter speed locked (0: auto, 1: locked)
+    float ShutterSpeedLocked = 0;
+    // ISO sensitivity
+    float IsoSensitivity = 0;
+    // ISO sensitivity locked (0: auto, 1: locked)
+    float IsoSensitivityLocked = 0;
+protected:
+    virtual void pack();
+    virtual void unpack();
+};
+// WIP: Set the camera settings part 2 (CAMERA_SETTINGS)
+class MavCmdSetCameraSettings2 : public MavLinkCommand {
+public:
+    const static uint16_t kCommandId = 524;
+    MavCmdSetCameraSettings2() { command = kCommandId; }
+    // Camera ID
+    float CameraId = 0;
+    // White balance locked (0: auto, 1: locked)
+    float WhiteBalanceLocked = 0;
+    // White balance (color temperature in K)
+    float WhiteBalance = 0;
+    // Reserved for camera mode ID
+    float ReservedForCamera = 0;
+    // Reserved for color mode ID
+    float ReservedForColor = 0;
+    // Reserved for image format ID
+    float ReservedForImage = 0;
+protected:
+    virtual void pack();
+    virtual void unpack();
+};
+// WIP: Request storage information (STORAGE_INFORMATION)
+class MavCmdRequestStorageInformation : public MavLinkCommand {
+public:
+    const static uint16_t kCommandId = 525;
+    MavCmdRequestStorageInformation() { command = kCommandId; }
+    // 1: Request storage information
+    float p1 = 0;
+    // Storage ID
+    float StorageId = 0;
+protected:
+    virtual void pack();
+    virtual void unpack();
+};
+// WIP: Format a storage medium
+class MavCmdStorageFormat : public MavLinkCommand {
+public:
+    const static uint16_t kCommandId = 526;
+    MavCmdStorageFormat() { command = kCommandId; }
+    // 1: Format storage
+    float p1 = 0;
+    // Storage ID
+    float StorageId = 0;
+protected:
+    virtual void pack();
+    virtual void unpack();
+};
+// WIP: Request camera capture status (CAMERA_CAPTURE_STATUS)
+class MavCmdRequestCameraCaptureStatus : public MavLinkCommand {
+public:
+    const static uint16_t kCommandId = 527;
+    MavCmdRequestCameraCaptureStatus() { command = kCommandId; }
+    // 1: Request camera capture status
+    float p1 = 0;
+    // Camera ID
+    float CameraId = 0;
+protected:
+    virtual void pack();
+    virtual void unpack();
+};
+// WIP: Request flight information (FLIGHT_INFORMATION)
+class MavCmdRequestFlightInformation : public MavLinkCommand {
+public:
+    const static uint16_t kCommandId = 528;
+    MavCmdRequestFlightInformation() { command = kCommandId; }
+    // 1: Request flight information
+    float p1 = 0;
+protected:
+    virtual void pack();
+    virtual void unpack();
+};
 // Start image capture sequence
 class MavCmdImageStartCapture : public MavLinkCommand {
 public:
@@ -6364,8 +6749,15 @@ public:
     float DurationBetweenTwo = 0;
     // Number of images to capture total - 0 for unlimited capture
     float NumberOfImages = 0;
-    // Resolution in megapixels (0.3 for 640x480, 1.3 for 1280x720, etc)
+    // Resolution in megapixels (0.3 for 640x480, 1.3 for 1280x720, etc), set to 0
+    // if param 4/5 are used
     float ResolutionMegapixels = 0;
+    // WIP: Resolution horizontal in pixels
+    float Wip = 0;
+    // WIP: Resolution horizontal in pixels
+    float Wip2 = 0;
+    // WIP: Camera ID
+    float Wip3 = 0;
 protected:
     virtual void pack();
     virtual void unpack();
@@ -6375,6 +6767,8 @@ class MavCmdImageStopCapture : public MavLinkCommand {
 public:
     const static uint16_t kCommandId = 2001;
     MavCmdImageStopCapture() { command = kCommandId; }
+    // Camera ID
+    float CameraId = 0;
 protected:
     virtual void pack();
     virtual void unpack();
@@ -6401,8 +6795,13 @@ public:
     float CameraId = 0;
     // Frames per second
     float FramesPerSecond = 0;
-    // Resolution in megapixels (0.3 for 640x480, 1.3 for 1280x720, etc)
+    // Resolution in megapixels (0.3 for 640x480, 1.3 for 1280x720, etc), set to 0
+    // if param 4/5 are used
     float ResolutionMegapixels = 0;
+    // WIP: Resolution horizontal in pixels
+    float Wip = 0;
+    // WIP: Resolution horizontal in pixels
+    float Wip2 = 0;
 protected:
     virtual void pack();
     virtual void unpack();
@@ -6412,6 +6811,40 @@ class MavCmdVideoStopCapture : public MavLinkCommand {
 public:
     const static uint16_t kCommandId = 2501;
     MavCmdVideoStopCapture() { command = kCommandId; }
+    // WIP: Camera ID
+    float Wip = 0;
+protected:
+    virtual void pack();
+    virtual void unpack();
+};
+// Request to start streaming logging data over MAVLink (see also LOGGING_DATA message)
+class MavCmdLoggingStart : public MavLinkCommand {
+public:
+    const static uint16_t kCommandId = 2510;
+    MavCmdLoggingStart() { command = kCommandId; }
+    // Format: 0: ULog
+    float Format = 0;
+protected:
+    virtual void pack();
+    virtual void unpack();
+};
+// Request to stop streaming log data over MAVLink
+class MavCmdLoggingStop : public MavLinkCommand {
+public:
+    const static uint16_t kCommandId = 2511;
+    MavCmdLoggingStop() { command = kCommandId; }
+protected:
+    virtual void pack();
+    virtual void unpack();
+};
+class MavCmdAirframeConfiguration : public MavLinkCommand {
+public:
+    const static uint16_t kCommandId = 2520;
+    MavCmdAirframeConfiguration() { command = kCommandId; }
+    // Landing gear ID (default: 0, -1 for all)
+    float LandingGearId = 0;
+    // Landing gear position (Down: 0, Up: 1, NAN for no change)
+    float LandingGearPosition = 0;
 protected:
     virtual void pack();
     virtual void unpack();

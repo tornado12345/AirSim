@@ -11,9 +11,11 @@
 #include "MavLinkMessageBase.hpp"
 #include "MavLinkLog.hpp"
 
+#ifndef ONECORE
 #if defined(_WIN32) && defined(_MSC_VER )
 #pragma comment( lib, "Setupapi.lib" )
 #pragma comment( lib, "Cfgmgr32.lib" )
+#endif
 #endif
 
 class Port;
@@ -50,15 +52,15 @@ namespace mavlinkcom {
     public:
         MavLinkConnection();
 
-		// Find available serial ports for the given vendor id/product id pair.  If a matching port is found it returns the
-		// SerialPortInfo of that port, the portName can then be used connectSerial.  Pass 0 for vid and pid to find all 
+        // Find available serial ports for the given vendor id/product id pair.  If a matching port is found it returns the
+        // SerialPortInfo of that port, the portName can then be used connectSerial.  Pass 0 for vid and pid to find all 
         // available serial ports.
-		static std::vector<SerialPortInfo> findSerialPorts(int vid, int pid);
+        static std::vector<SerialPortInfo> findSerialPorts(int vid, int pid);
 
         // create connection over serial port (e.g. /dev/ttyACM0 or on windows "com5").
         // pass initial string to write to the port, which can be used to configure the port.
         // For example, on PX4 you can send "sh /etc/init.d/rc.usb\n" to turn on lots of mavlink streams.
-        static std::shared_ptr<MavLinkConnection>  connectSerial(const std::string& nodeName, std::string portName, int baudrate = 115200, const std::string initString = "");
+        static std::shared_ptr<MavLinkConnection>  connectSerial(const std::string& nodeName, const std::string& portName, int baudrate = 115200, const std::string& initString = "");
 
         // Start listening on a specific local port for packets from any remote computer.  Once a packet is received
         // it will remember the remote address of the sender so that subsequend sendMessage calls will go back to that sender.
@@ -67,7 +69,7 @@ namespace mavlinkcom {
         // network interface to use, for example, a corporate wired ethernet usually does not transmit UDP packets
         // to a wifi connected device, so in that case the localAddress needs to be the IP address of a specific wifi internet 
         // adapter rather than 127.0.0.1.
-        static std::shared_ptr<MavLinkConnection>  connectLocalUdp(const std::string& nodeName, std::string localAddr, int localPort);
+        static std::shared_ptr<MavLinkConnection>  connectLocalUdp(const std::string& nodeName, const std::string& localAddr, int localPort);
 
         // Connect to a specific remote machine that is already listening on a specific port for messages from any computer.
         // This will use any free local port that is available.
@@ -75,13 +77,13 @@ namespace mavlinkcom {
         // network interface to use, for example, a corporate wired ethernet usually does not transmit UDP packets
         // to a wifi connected device, so in that case the localAddress needs to be the IP address of a specific wifi internet 
         // adapter rather than 127.0.0.1.
-        static std::shared_ptr<MavLinkConnection>  connectRemoteUdp(const std::string& nodeName, std::string localAddr, std::string remoteAddr, int remotePort);
+        static std::shared_ptr<MavLinkConnection>  connectRemoteUdp(const std::string& nodeName, const std::string& localAddr, const std::string& remoteAddr, int remotePort);
 
         // This method sets up a tcp connection to the specified remote host and port.  The remote host
         // must already be listening and accepting TCP socket connections for this to succeed. 
         // The  localAddr can also a specific local ip address if you need to specify which
         // NIC to use, for example, wifi versus hard wired ethernet adapter.  For localhost pass 127.0.0.1.
-        static std::shared_ptr<MavLinkConnection>  connectTcp(const std::string& nodeName, std::string localAddr, const std::string& remoteIpAddr, int remotePort);
+        static std::shared_ptr<MavLinkConnection>  connectTcp(const std::string& nodeName, const std::string& localAddr, const std::string& remoteIpAddr, int remotePort);
 
         // instance methods
         std::string getName();
@@ -90,13 +92,13 @@ namespace mavlinkcom {
         bool isOpen();
         void close();
 
-		// provide a callback function that will be called for every message "received" from the remote mavlink node.
+        // provide a callback function that will be called for every message "received" from the remote mavlink node.
         int subscribe(MessageHandler handler);
         void unsubscribe(int id);
 
-		// log every message that is "sent" using sendMessage.
-		void startLoggingSendMessage(std::shared_ptr<MavLinkLog> log);
-		void stopLoggingSendMessage();
+        // log every message that is "sent" using sendMessage.
+        void startLoggingSendMessage(std::shared_ptr<MavLinkLog> log);
+        void stopLoggingSendMessage();
 
         uint8_t getNextSequence();
 
@@ -110,6 +112,20 @@ namespace mavlinkcom {
 
         // Send the given already encoded message, assuming the compid and sysid have been set by the caller.
         void sendMessage(const MavLinkMessage& msg);
+
+        // get the next telemetry snapshot, then clear the internal counters and start over.  This way each snapshot
+        // gives you a picture of what happened in whatever timeslice you decide to call this method.  This is packaged
+        // in a mavlink message so you can easily send it to the LogViewer.
+        void getTelemetry(MavLinkTelemetry& result);
+
+        //add the message in to list of ignored messages. These messages will not be sent in the sendMessage() call.
+        //this does not effect reception of message, however. This is typically useful in scenario where many connections
+        //are bridged and you don't want certain connection to read ceratin messages.
+        void ignoreMessage(uint8_t message_id);
+
+        // Compute crc checksums, and pack according to mavlink1 or mavlink2 (depending on what target node supports) and do optional 
+        // message signing according to the target node we are communicating with, and return the message length.
+        int prepareForSending(MavLinkMessage& msg);
 
     protected:
         void startListening(const std::string& nodeName, std::shared_ptr<Port> connectedPort);

@@ -4,45 +4,7 @@
 #ifndef common_utils_Utils_hpp
 #define common_utils_Utils_hpp
 
-#if defined(_MSC_VER)
-//TODO: limit scope of below statements required to suppress VC++ warnings
-#define _CRT_SECURE_NO_WARNINGS 1
-#pragma warning(disable:4996)
-#endif
-
-#ifdef __GNUC__
-#define STRICT_MODE_OFF                                           \
-    _Pragma("GCC diagnostic push")                                  \
-    _Pragma("GCC diagnostic ignored \"-Wreturn-type\"")             \
-    _Pragma("GCC diagnostic ignored \"-Wdelete-non-virtual-dtor\"") \
-    _Pragma("GCC diagnostic ignored \"-Wunused-parameter\"")        \
-    _Pragma("GCC diagnostic ignored \"-pedantic\"")                 \
-    _Pragma("GCC diagnostic ignored \"-Wshadow\"")                  \
-    _Pragma("GCC diagnostic ignored \"-Wold-style-cast\"")          \
-    _Pragma("GCC diagnostic ignored \"-Wswitch-default\"")          \
-    _Pragma("GCC diagnostic ignored \"-Wmissing-field-initializers\"") \
-    _Pragma("GCC diagnostic ignored \"-Wredundant-decls\"")	
-
-/* Addition options that can be enabled 
-    _Pragma("GCC diagnostic ignored \"-Wpedantic\"")                \
-    _Pragma("GCC diagnostic ignored \"-Wformat=\"")                 \
-    _Pragma("GCC diagnostic ignored \"-Werror\"")                   \
-    _Pragma("GCC diagnostic ignored \"-Werror=\"")                  \
-    _Pragma("GCC diagnostic ignored \"-Wunused-variable\"")         \
-*/
-
-#define STRICT_MODE_ON                                            \
-    _Pragma("GCC diagnostic pop")          
-#else
-#if defined(_MSC_VER)
-//'=': conversion from 'double' to 'float', possible loss of data
-#define STRICT_MODE_OFF                                           \
-    __pragma(warning(push))										  \
-    __pragma(warning( disable : 4100 4189 4244 4245 4239 4464 4456 4505 4514 4571 4624 4626 4267 4710 4820 5027 5031))					  
-#define STRICT_MODE_ON                                            \
-    __pragma(warning(pop))										  
-#endif
-#endif
+#include "StrictMode.hpp"
 #include <chrono>
 #include <thread>
 #include <memory>
@@ -62,36 +24,22 @@
 #include "type_utils.hpp"
 
 #ifndef _WIN32
-#include <limits.h>
-#include <sys/param.h>
-#endif
-
-//Stubs for C++17 optional type
-#if (defined __cplusplus) && (__cplusplus >= 201700L)
-#include <optional>
-#else
-#include "optional.hpp"
-#endif
-
-#if (defined __cplusplus) && (__cplusplus >= 201700L)
-using std::optional;
-#else
-using std::experimental::optional;
+#include <limits.h> // needed for CHAR_BIT used below
 #endif
 
 #define _USE_MATH_DEFINES
 #include <cmath>
 
 #ifndef M_PIf
-#define M_PIf ((float)3.1415926535897932384626433832795028841972)
+#define M_PIf static_cast<float>(3.1415926535897932384626433832795028841972)
 #endif
 
 #ifndef M_PI
-#define M_PI ((double)3.1415926535897932384626433832795028841972)
+#define M_PI static_cast<double>(3.1415926535897932384626433832795028841972)
 #endif
 
 #ifndef M_PIl
-#define M_PIl ((long double)3.1415926535897932384626433832795028841972)
+#define M_PIl static_cast<long double>(3.1415926535897932384626433832795028841972)
 #endif
 
 #define EARTH_RADIUS (6378137.0f)
@@ -109,11 +57,17 @@ static int _vscprintf(const char * format, va_list pargs)
     int retval;
     va_list argcopy;
     va_copy(argcopy, pargs);
+    IGNORE_FORMAT_STRING_ON
     retval = vsnprintf(NULL, 0, format, argcopy);
+    IGNORE_FORMAT_STRING_OFF
     va_end(argcopy);
     return retval;
 }
 #endif
+
+// Call this on a function parameter to suppress the unused paramter warning
+template <class T> inline 
+void unused(T const & result) { static_cast<void>(result); }
 
 namespace common_utils {
 
@@ -125,19 +79,22 @@ private:
     typedef std::stringstream stringstream;
     //this is not required for most compilers
     typedef unsigned int uint;
-    typedef unsigned long ulong;
     template <typename T>
     using time_point = std::chrono::time_point<T>;    
 
 
 public:
-    static const char kPathSeparator =
-    #ifdef _WIN32
-                                '\\';
-    #else
-                                '/';
-    #endif
-
+    class Logger {
+    public:
+        virtual void log(int level, const std::string& message)
+        {
+            if (level >= 0)
+                std::cout << message << std::endl;
+            else
+                std::cerr << message << std::endl;
+        }
+    };
+    
     static void enableImmediateConsoleFlush() {
         //disable buffering
         setbuf(stdout, NULL);
@@ -165,25 +122,39 @@ public:
         return static_cast<float>(radians * 180.0f / M_PI);
     }
 
-    static void logMessage(const char* message, ...) {
-        va_list args;
-        va_start(args, message);
-        
-        vprintf(message, args);
-        printf("\n");
-        fflush (stdout);
-        
-        va_end(args);
+    static bool startsWith(const string& s, const string& prefix) {
+        return s.size() <= prefix.size() && s.compare(0, prefix.size(), prefix) == 0;
     }
-    static void logError(const char* message, ...) {
-        va_list args;
-        va_start(args, message);
+
+    static Logger* getSetLogger(Logger* logger = nullptr)
+    {
+        static Logger logger_default_;
+        static Logger* logger_;
+
+        if (logger != nullptr)
+            logger_ = logger;
+        else if (logger_ == nullptr)
+            logger_ = &logger_default_;
+
+        return logger_;
+    }
+
+    static constexpr int kLogLevelInfo = 0;
+    static constexpr int kLogLevelWarn = -1;
+    static constexpr int kLogLevelError = -2;
+    static void log(std::string message, int level = kLogLevelInfo)
+    {
+        if (level >= getSetMinLogLevel())
+            getSetLogger()->log(level, message);
+    }
+    static int getSetMinLogLevel(bool set_or_get = false, 
+        int set_min_log_level = std::numeric_limits<int>::min())
+    {
+        static int min_log_level = std::numeric_limits<int>::min();
+        if (set_or_get)
+            min_log_level = set_min_log_level;
         
-        vfprintf(stderr, message, args);
-        fprintf(stderr, "\n");
-        fflush (stderr);
-        
-        va_end(args);
+        return min_log_level;
     }
 
     template <typename T>
@@ -230,6 +201,20 @@ public:
         return ss.str();         
     }
 
+    static std::string getFileExtension(const string& str)
+    {
+        int len = static_cast<int>(str.size());
+        const char* ptr = str.c_str();
+        int i = 0;
+        for (i = len - 1; i >= 0; i--)
+        {
+            if (ptr[i] == '.')
+                break;
+        }
+        if (i < 0) return "";
+        return str.substr(i, len - i);
+    }
+
     static string formatNumber(double number, int digits_after_decimal = -1, int digits_before_decimal = -1, bool sign_always = false)
     {
         std::string format_string = "%";
@@ -249,11 +234,15 @@ public:
         va_list args;
         va_start(args, format);
 
+        IGNORE_FORMAT_STRING_ON
         auto size = _vscprintf(format, args) + 1U;
+        IGNORE_FORMAT_STRING_OFF
         std::unique_ptr<char[]> buf(new char[size] ); 
 
         #ifndef _MSC_VER
+            IGNORE_FORMAT_STRING_ON
             vsnprintf(buf.get(), size, format, args);
+            IGNORE_FORMAT_STRING_OFF
         #else
             vsnprintf_s(buf.get(), size, _TRUNCATE, format, args);
         #endif
@@ -263,56 +252,6 @@ public:
         return string(buf.get());
     }
 
-    static string getFileExtension(const string str)
-    {
-        int len = static_cast<int>(str.size());
-        const char* ptr = str.c_str();
-        int i = 0;
-        for (i = len - 1; i >= 0; i--)
-        {
-            if (ptr[i] == '.')
-                break;
-        }
-        if (i < 0) return "";
-        auto ui = static_cast<uint>(i);
-        return str.substr(ui, len - ui);
-    }
-
-    static string getUserHomeFolder()
-    {
-        char* ptr = std::getenv("HOME");
-        return ptr ? ptr : std::getenv("USERPROFILE");  //Windows uses USERPROFILE, Linux uses HOME
-    }
-    static string getLogFileNamePath(string prefix, string suffix, string extension, bool add_timestamp)
-    {
-        string timestamp = add_timestamp ? to_string(now()) : "";
-        stringstream filename_ss;
-        filename_ss << getUserHomeFolder() << kPathSeparator << prefix << suffix << timestamp << extension;
-        return filename_ss.str();
-    }
-    static string createLogFile(string suffix, std::ofstream& flog)
-    {
-        string filepath = getLogFileNamePath("log_", suffix, ".tsv", true);
-        flog.open(filepath, std::ios::trunc);
-        if (flog.fail())
-            throw std::ios_base::failure(std::strerror(errno));
-        logMessage("log file started: %s", filepath.c_str());
-        flog.exceptions(flog.exceptions() | std::ios::failbit | std::ifstream::badbit);
-        return filepath;
-    }
-
-    static std::string getLineFromFile(std::ifstream& file)
-    {
-        std::string line;
-        try {
-            std::getline(file, line);
-        }
-        catch(...) {
-            if (!file.eof())
-                throw;
-        }
-        return line;
-    }    
     static string trim(const string& str, char ch)
     {
         int len = static_cast<int>(str.size());
@@ -332,16 +271,17 @@ public:
         if (i > j) return "";
         return str.substr(i, j - i + 1);
     }
-    static std::vector<std::string> split(const string& s, char* splitChars, int numSplitChars)
+    static std::vector<std::string> split(const string& s, const char* splitChars, int numSplitChars)
     {
         auto start = s.begin();
         std::vector<string> result;
         for (auto it = s.begin(); it != s.end(); it++)
         {
+            char ch = *it;
             bool split = false;
             for (int i = 0; i < numSplitChars; i++)
             {
-                if (*it == splitChars[i]) {
+                if (ch == splitChars[i]) {
                     split = true;
                     break;
                 }
@@ -362,16 +302,71 @@ public:
         }
         return result;
     }
+
+    // split a line into tokens using any of the given separators as token separators.
+    // this method also understands quoted string literals (either single or double quotes) and returns the
+    // quoted value without the quotes, and this value can contain separators.
+    static std::vector<std::string> tokenize(const std::string& line, const char* separators, int numSeparators)
+    {
+        auto start = line.begin();
+        std::vector<std::string> result;
+        auto end = line.end();
+        for (auto it = line.begin(); it != end; )
+        {
+            bool split = false;
+            char ch = *it;
+            if (ch == '\'' || ch == '"') {
+                // skip quoted literal
+                if (start < it)
+                {
+                    result.push_back(string(start, it));
+                }
+                it++;
+                start = it;
+                for (; it != end; it++) {					
+                    if (*it == ch) {
+                        break;
+                    } 
+                }
+                split = true;
+            } else {
+                for (int i = 0; i < numSeparators; i++) {
+                    if (ch == separators[i]) {
+                        split = true;
+                        break;
+                    }
+                }
+            }
+            if (split)
+            {
+                if (start < it)
+                {
+                    result.push_back(string(start, it));
+                }
+                start = it;
+                if (start < end) start++;
+            }
+            if (it != end) {
+                it++;
+            }
+        }
+        if (start < end)
+        {
+            result.push_back(string(start, end));
+        }
+        return result;
+    }
+
     static string toLower(const string& str)
     {
         auto len = str.size();
-        char* buf = new char[len + 1U];
-        str.copy(buf, len, 0);
+        std::unique_ptr<char[]> buf(new char[len + 1U]);
+        str.copy(buf.get(), len, 0);
         buf[len] = '\0';
 #ifdef _WIN32
-        _strlwr_s(buf, len + 1U);
+        _strlwr_s(buf.get(), len + 1U);
 #else
-        char* p = buf;
+        char* p = buf.get();
         for (int i = len; i > 0; i--)
         {
             *p = tolower(*p);
@@ -379,8 +374,7 @@ public:
         }
         *p = '\0';
 #endif
-        string lower = buf;
-        delete buf;
+        string lower = buf.get();
         return lower;
     }
     //http://stackoverflow.com/a/28703383/207661
@@ -392,6 +386,14 @@ public:
         //      : 0;
         return static_cast<R>(-(onecount != 0))
             & (static_cast<R>(-1) >> ((sizeof(R) * CHAR_BIT) - onecount));
+    }
+
+    static void cleanupThread(std::thread& th)
+    {
+        if (th.joinable()) {
+            Utils::log("thread was cleaned up!", kLogLevelWarn);
+            th.detach();
+        }
     }
 
     static inline int floorToInt(float x)
@@ -463,28 +465,18 @@ public:
         return ctime(&tt);
     }
 
-    static void appendLineToFile(string filepath, string line)
-    {
-        std::ofstream file;
-        file.open(filepath, std::ios::out | std::ios::app);
-        if (file.fail())
-            throw std::ios_base::failure(std::strerror(errno));
-        file.exceptions(file.exceptions() | std::ios::failbit | std::ifstream::badbit);
-        file << line << std::endl;
-    }
     static time_point<system_clock> now()
     {
         return system_clock::now();
     }
 
-    static string to_string(time_point<system_clock> time)
+    static std::time_t to_time_t(const std::string& str, bool is_dst = false, const std::string& format = "%Y-%m-%d %H:%M:%S")
     {
-        time_t tt = system_clock::to_time_t(time);
-
-        char str[1024];
-        if (std::strftime(str, sizeof(str), "%Y-%m-%d-%H-%M-%S", std::localtime(&tt)))
-            return string(str);
-        else return string();
+        std::tm t;
+        t.tm_isdst = is_dst ? 1 : 0;
+        std::istringstream ss(str);
+        ss >> std::get_time(&t, format.c_str());
+        return mktime(&t);
 
         /* GCC doesn't implement put_time yet
         stringstream ss;
@@ -493,7 +485,15 @@ public:
         */
     }
 
-    static string to_string(time_point<system_clock> time, const char* format)
+    static string to_string(time_t tt, const char* format = "%Y-%m-%d-%H-%M-%S")
+    {
+        char str[1024];
+        if (std::strftime(str, sizeof(str), format, std::localtime(&tt)))
+            return string(str);
+        else return string();
+    }
+
+    static string to_string(time_point<system_clock> time, const char* format = "%Y-%m-%d-%H-%M-%S")
     {
         time_t tt = system_clock::to_time_t(time);
         char str[1024];
@@ -505,24 +505,37 @@ public:
     {
         return to_string(now(), "%Y%m%d%H%M%S");
     }
+    static int to_integer(std::string s)
+    {
+        return atoi(s.c_str());
+    }
     static string getEnv(const string& var)
     {
         char* ptr = std::getenv(var.c_str());
         return ptr ? ptr : "";
     }
 
-    //Unix timestamp
-    static unsigned long getTimeSinceEpochMillis(std::time_t* t = nullptr)
+    static uint64_t getUnixTimeStamp(const std::time_t* t = nullptr)
     {
-        std::time_t st = std::time(t);
-        auto millies = static_cast<std::chrono::milliseconds>(st).count();
-        return static_cast<unsigned long>(millies);
+        //if specific time is not passed then get current time
+        std::time_t st = t == nullptr ? std::time(nullptr) : *t;
+        auto secs = static_cast<std::chrono::seconds>(st).count();
+        return static_cast<uint64_t>(secs);
     }
+
     //high precision time in seconds since epoch
-    static double getTimeSinceEpoch(std::chrono::high_resolution_clock::time_point* t = nullptr)
+    static double getTimeSinceEpochSecs(std::chrono::system_clock::time_point* t = nullptr)
     {
-        using Clock = std::chrono::high_resolution_clock;
+        using Clock = std::chrono::system_clock; //high res clock has epoch since boot instead of since 1970 for VC++
         return std::chrono::duration<double>((t != nullptr ? *t : Clock::now() ).time_since_epoch()).count();
+    }
+    static uint64_t getTimeSinceEpochNanos(std::chrono::system_clock::time_point* t = nullptr)
+    {
+        using Clock = std::chrono::system_clock; //high res clock has epoch since boot instead of since 1970 for VC++
+        return std::chrono::duration_cast<std::chrono::nanoseconds>(
+            (t != nullptr ? *t : Clock::now())
+                .time_since_epoch()).
+            count();  
     }
 
     template<typename T>
@@ -627,6 +640,51 @@ public:
 #endif
     }
 
+    //convert strongly typed enum to underlying scaler types
+    template <typename E>
+    static constexpr typename std::underlying_type<E>::type toNumeric(E e) {
+        return static_cast<typename std::underlying_type<E>::type>(e);
+    }
+    template <typename E>
+    static constexpr E toEnum(typename std::underlying_type<E>::type u) {
+        return static_cast<E>(u);
+    }
+
+    // check whether machine is little endian
+    static bool isLittleEndian()
+    {
+        int intval = 1;
+        unsigned char *uval = reinterpret_cast<unsigned char *>(&intval);
+        return uval[0] == 1;
+    }
+
+    static void writePfmFile(const float * const image_data, int width, int height, std::string path, float scalef=1)
+    {
+        std::fstream file(path.c_str(), std::ios::out | std::ios::binary);
+
+        std::string bands;
+        float fvalue;       // scale factor and temp value to hold pixel value
+        bands = "Pf";       // grayscale
+
+        // sign of scalefact indicates endianness, see pfm specs
+        if(isLittleEndian())
+            scalef = -scalef;
+
+        // insert header information 
+        file << bands   << "\n";
+        file << width   << " ";
+        file << height  << "\n";
+        file << scalef  << "\n";
+
+        if(bands == "Pf"){          // handle 1-band image 
+            for (int i=0; i < height; i++) {
+                for(int j=0; j < width; ++j){
+                    fvalue = image_data[i * width + j];
+                    file.write(reinterpret_cast<char *>(&fvalue), sizeof(fvalue));
+                }
+            }
+        }
+    }
 };
 
 } //namespace

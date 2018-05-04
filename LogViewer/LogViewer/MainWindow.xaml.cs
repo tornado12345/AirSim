@@ -1,5 +1,6 @@
 ﻿using LogViewer.Controls;
 using LogViewer.Model;
+using LogViewer.Model.ULog;
 using LogViewer.Utilities;
 using Microsoft.Maps.MapControl.WPF;
 using Microsoft.Networking.Mavlink;
@@ -17,7 +18,6 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Media.Media3D;
 using System.Xml.Linq;
@@ -37,6 +37,9 @@ namespace LogViewer
         Quaternion initialAttitude;
         MapPolyline currentFlight;
         MavlinkLog currentFlightLog;
+        long lastAttitudeMessage;
+        List<LogEntry> mappedLogEntries;
+        MapLayer annotationLayer;
 
         public MainWindow()
         {
@@ -56,9 +59,22 @@ namespace LogViewer
             this.SizeChanged += OnWindowSizeChanged;
             this.LocationChanged += OnWindowLocationChanged;
             ChartStack.Visibility = Visibility.Collapsed;
+            ChartStack.ZoomChanged += OnZoomChanged;
             initialAttitude = ModelViewer.ModelAttitude;
             CameraPanel.Visibility = Visibility.Collapsed;
-            SystemConsole.Visibility = Visibility.Collapsed;            
+            SystemConsole.Visibility = Visibility.Collapsed;
+        }
+
+        private void OnZoomChanged(object sender, EventArgs e)
+        {
+            double total = 0;
+            double count = 0;
+            foreach (var chart in ChartStack.FindCharts())
+            {
+                total += chart.GetVisibleCount();
+                count++;
+            }
+            ShowStatus(string.Format("zoom shwowing {0} data values", (int)(total / count)));
         }
 
         private void OnWindowLocationChanged(object sender, EventArgs e)
@@ -109,7 +125,7 @@ namespace LogViewer
             ConnectorControl.Connected = true;
 
             QuadButton.IsChecked = true;
-            
+
             var channel = ConnectionPanel.Channel;
             channel.MessageReceived += OnMavlinkMessageReceived;
 
@@ -132,17 +148,22 @@ namespace LogViewer
             {
                 case MAVLink.MAVLINK_MSG_ID.ATTITUDE_QUATERNION:
                     {
-                        var payload = (MAVLink.mavlink_attitude_quaternion_t)e.TypedPayload;
-                        var q = new System.Windows.Media.Media3D.Quaternion(payload.q1, payload.q2, payload.q3, payload.q4);
-                        UiDispatcher.RunOnUIThread(() =>
-                        {
+                        // Only do this if drone is not sending MAVLINK_MSG_ID.ATTITUDE...
+                        if (Environment.TickCount - lastAttitudeMessage > 1000)
+                        {                            
+                            var payload = (MAVLink.mavlink_attitude_quaternion_t)e.TypedPayload;
+                            var q = new System.Windows.Media.Media3D.Quaternion(payload.q1, payload.q2, payload.q3, payload.q4);
+                            UiDispatcher.RunOnUIThread(() =>
+                            {
                             ModelViewer.ModelAttitude = initialAttitude * q;
                         });
+                        }
                         break;
                     }
 
                 case MAVLink.MAVLINK_MSG_ID.ATTITUDE:
                     {
+                        lastAttitudeMessage = Environment.TickCount;
                         var payload = (MAVLink.mavlink_attitude_t)e.TypedPayload;
                         Quaternion y = new Quaternion(new Vector3D(0, 0, 1), -payload.yaw * 180 / Math.PI);
                         Quaternion x = new Quaternion(new Vector3D(1, 0, 0), payload.pitch * 180 / Math.PI);
@@ -153,6 +174,7 @@ namespace LogViewer
                         });
                         break;
                     }
+
                 case MAVLink.MAVLINK_MSG_ID.HIL_STATE_QUATERNION:
                     {
                         var payload = (MAVLink.mavlink_hil_state_quaternion_t)e.TypedPayload;
@@ -297,7 +319,7 @@ namespace LogViewer
 
         private void OnChannelDisconnected(object sender, EventArgs e)
         {
-            ConnectorControl.Connected = false;            
+            ConnectorControl.Connected = false;
             SystemConsole.Channel = null;
         }
 
@@ -307,18 +329,18 @@ namespace LogViewer
             Task.Run(async () => { await LoadBinaryFile(fileName); });
         }
 
+
         private async void OnOpenFile(object sender, RoutedEventArgs e)
         {
             OpenButton.IsEnabled = false;
 
             Microsoft.Win32.OpenFileDialog fo = new Microsoft.Win32.OpenFileDialog();
-            fo.Filter = "PX4 Log Files (*.px4log)|*.px4log|CSV Files (*.csv)|*.csv|bin files (*.bin)|*.bin|mavlink files (*.mavlink)|*.mavlink";
+            fo.Filter = "PX4 Log Files (*.px4log)|*.px4log|PX4 ulog Files (*.ulg)|*.ulg|CSV Files (*.csv)|*.csv|bin files (*.bin)|*.bin|mavlink files (*.mavlink)|*.mavlink|JSON files (*.json)|*.json|KML files (*.kml)|*.kml";
             fo.CheckFileExists = true;
             fo.Multiselect = true;
             if (fo.ShowDialog() == true)
             {
                 SystemConsole.Show();
-
                 foreach (var file in fo.FileNames)
                 {
                     switch (System.IO.Path.GetExtension(file).ToLowerInvariant())
@@ -330,17 +352,135 @@ namespace LogViewer
                         case ".px4log":
                             await Task.Run(async () => { await LoadBinaryFile(file); });
                             break;
+                        case ".ulg":
+                        case ".ulog":
+                            await Task.Run(async () => { await LoadULogFile(file); });
+                            break;
                         case ".mavlink":
                             await Task.Run(async () => { await LoadMavlinkFile(file); });
+                            break;
+                        case ".json":
+                            await Task.Run(async () => { await LoadJSonFile(file); });
+                            break;
+                        case ".kml":
+                            await Task.Run(async () => { await LoadKmlFile(file); });
                             break;
                         default:
                             MessageBox.Show("Do not know how to read files of type : " + System.IO.Path.GetExtension(file),
                                 "Unsupported file extension", MessageBoxButton.OK, MessageBoxImage.Exclamation);
                             break;
                     }
-                }            
+                    UpdateTitle(System.IO.Path.GetFileName(file));
+                }
+                ShowTotalFlightTime();
             }
             OpenButton.IsEnabled = true;
+        }
+
+        string originalTitle;
+
+        private void UpdateTitle(string caption)
+        {
+            if (originalTitle == null)
+            {
+                originalTitle = this.Title;
+            }
+            if (string.IsNullOrEmpty(caption))
+            {
+                this.Title = originalTitle;
+            }
+            else
+            {
+                this.Title = originalTitle + " - " + caption;
+            }
+        }
+
+        private async Task LoadJSonFile(string file)
+        {
+            try
+            {
+                UiDispatcher.RunOnUIThread(() =>
+                {
+                    SystemConsole.Show();
+                });
+                AppendMessage("Loading " + file);
+                ShowStatus("Loading " + file);
+
+                JSonDataLog data = new JSonDataLog();
+                await data.Load(file, progress);
+
+                //logs.Add(data);
+                ShowSchema();
+
+                LoadFlights(data);
+
+            }
+            catch (Exception ex)
+            {
+                AppendMessage("### Error loading json file: " + ex.Message);
+            }
+            ShowStatus("Done Loading " + file);
+            UpdateButtons();
+        }
+
+        private async Task LoadKmlFile(string file)
+        {
+            try
+            {
+                await Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    SystemConsole.Show();
+                })).Task;
+
+                AppendMessage("Loading " + file);
+                ShowStatus("Loading " + file);
+
+                XDocument doc = XDocument.Load(file);
+                KmlDataLog data = new Model.KmlDataLog();
+                data.Load(doc);
+
+                ShowSchema();
+
+                LoadFlights(data);
+                this.logs.Add(data);
+            }
+            catch (Exception ex)
+            {
+                AppendMessage("### Error loading KML file: " + ex.Message);
+            }
+            ShowStatus("Done Loading " + file);
+            UpdateButtons();
+        }
+
+        private async Task LoadULogFile(string file)
+        {
+            try
+            {
+                UiDispatcher.RunOnUIThread(() =>
+                {
+                    SystemConsole.Show();
+                });
+                AppendMessage("Loading " + file);
+                ShowStatus("Loading " + file);
+
+                Px4ULog data = new Px4ULog();
+                await data.Load(file, progress);
+
+                logs.Add(data);
+                ShowSchema();
+                LoadFlights(data);
+
+                // remember successfully loaded log file.
+                Settings settings = await ((App)App.Current).LoadSettings();
+                settings.LastLogFile = file;
+                await settings.SaveAsync();
+            }
+            catch (Exception ex)
+            {
+                AppendMessage("### Error loading log: " + ex.Message);
+            }
+            ShowStatus("Done Loading " + file);
+            UpdateButtons();
         }
 
         private async Task LoadBinaryFile(string file)
@@ -359,32 +499,7 @@ namespace LogViewer
 
                 logs.Add(data);
                 ShowSchema();
-
-                UiDispatcher.RunOnUIThread(() =>
-                {
-                    // add flights 
-                    Flight entireLog = new Flight()
-                    {
-                        Name = "Log " + logs.Count,
-                        StartTime = data.StartTime,
-                        Duration = data.Duration
-                    };
-                    allFlights.Add(entireLog);
-
-                    foreach (var flight in data.GetFlights())
-                    {
-                        flight.Name = "Flight " + allFlights.Count;
-                        allFlights.Add(flight);
-                        AppendMessage("Motor started at {0} and ran for {1} ", flight.StartTime, flight.Duration);
-                    }
-
-                    if (myMap.Visibility == Visibility.Visible)
-                    {
-                        ShowMap();
-                    }
-
-                    ShowTotalFlightTime();
-                });
+                LoadFlights(data);
 
                 // remember successfully loaded log file.
                 Settings settings = await ((App)App.Current).LoadSettings();
@@ -397,6 +512,36 @@ namespace LogViewer
             }
             ShowStatus("Done Loading " + file);
             UpdateButtons();
+        }
+
+        private void LoadFlights(IDataLog data)
+        {
+            UiDispatcher.RunOnUIThread(() =>
+            {
+                // add flights 
+                Flight entireLog = new Flight()
+                {
+                    Name = "Log " + logs.Count,
+                    StartTime = DateTime.MinValue,
+                    Duration = TimeSpan.MaxValue,
+                    Log = data
+                };
+                allFlights.Add(entireLog);
+
+                foreach (var flight in data.GetFlights())
+                {
+                    flight.Name = "Flight " + allFlights.Count;
+                    allFlights.Add(flight);
+                    AppendMessage("Motor started at {0} and ran for {1} ", flight.StartTime, flight.Duration);
+                }
+
+                if (myMap.Visibility == Visibility.Visible)
+                {
+                    ShowMap();
+                }
+                
+            });
+
         }
 
         private void ShowTotalFlightTime()
@@ -446,30 +591,7 @@ namespace LogViewer
                 ShowSchema();
 
                 Debug.WriteLine(data.StartTime.ToString());
-
-                UiDispatcher.RunOnUIThread(() =>
-                {
-                    foreach (var flight in data.GetFlights())
-                    {
-                        flight.Name = "Flight " + allFlights.Count;
-                        allFlights.Add(flight);
-                        AppendMessage("Motor started at {0} and ran for {1} ", flight.StartTime, flight.Duration);
-                    }
-
-                    if (myMap.Visibility == Visibility.Visible)
-                    {
-                        ShowMap();
-                    }
-
-                    foreach (var text in data.GetStatusMessages())
-                    {
-                        SystemConsole.Write(text + "\n");
-                    }
-
-                    ShowTotalFlightTime();
-                });
-
-
+                LoadFlights(data);
 
                 // remember successfully loaded log file.
                 Settings settings = await ((App)App.Current).LoadSettings();
@@ -493,10 +615,12 @@ namespace LogViewer
                 CsvDataLog log = new CsvDataLog();
                 await log.Load(file, progress);
 
-                FlightView.ItemsSource = new List<Flight>();
-                logs.Add(log);
-
-                ShowSchema();
+                UiDispatcher.RunOnUIThread(() =>
+                {
+                    FlightView.ItemsSource = new List<Flight>();
+                    logs.Add(log);
+                    ShowSchema();
+                });
 
             }
             catch (Exception ex)
@@ -517,9 +641,17 @@ namespace LogViewer
                 {
                     schema = currentFlightLog.Schema;
                 }
-                else if (this.logs.Count > 0)
+                foreach (var log in this.logs)
                 {
-                    schema = this.logs[0].Schema;
+                    var s = log.Schema;
+                    if (schema == null)
+                    {
+                        schema = s;
+                    }
+                    else
+                    {
+                        schema.Combine(s);
+                    }
                 }
                 if (schema == null || schema.ChildItems == null || schema.ChildItems.Count == 0)
                 {
@@ -527,7 +659,6 @@ namespace LogViewer
                 }
                 else 
                 {
-                    // todo: compute combined schema for selected logs, but for now just show the first one.
                     List<LogItemSchema> list = new List<Model.LogItemSchema>(schema.ChildItems);
                     list.Sort((a, b) => { return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase); });
                     CategoryList.ItemsSource = list;
@@ -648,6 +779,28 @@ namespace LogViewer
             }
         }
 
+        List<LogEntryGPS> mapData = null;
+
+        Pushpin GetOrCreateMapMarker(Location loc)
+        {
+            Pushpin mapMarker = null;
+            foreach (var child in myMap.Children)
+            {
+                if (child is Pushpin)
+                {
+                    mapMarker = (Pushpin)child;
+                    break;
+                }
+            }
+            if (mapMarker == null)
+            {
+                mapMarker = new Pushpin();
+                myMap.Children.Add(mapMarker);
+            }
+            mapMarker.Location = loc;
+            return mapMarker;
+        }
+
         void ShowMap()
         {
             myMap.Children.Clear();
@@ -658,6 +811,7 @@ namespace LogViewer
                 // show everything.
                 selected.Add(new Flight() { StartTime = DateTime.MinValue, Duration = TimeSpan.MaxValue });
             }
+            mapData = new List<Utilities.LogEntryGPS>();
             var glitchIcon = XamlExtensions.LoadImageResource("Assets.GpsGlitchIcon.png");
             var imageLayer = new MapLayer();
             myMap.Children.Add(imageLayer);
@@ -672,18 +826,28 @@ namespace LogViewer
                         if (flight.Log == null || flight.Log == log)
                         {
                             MapPolyline line = new MapPolyline();
+                            line.StrokeLineJoin = PenLineJoin.Round;
                             line.StrokeThickness = 4;
                             line.Stroke = new SolidColorBrush(GetRandomColor());
                             LocationCollection points = new LocationCollection();
+                            mappedLogEntries = new List<Model.LogEntry>();
 
-                            Debug.WriteLine("time,\t\tlat,\t\tlong,\t\t\tnsat,\talt,\thdop,\tfix");
+                            //Debug.WriteLine("time,\t\tlat,\t\tlong,\t\t\tnsat,\talt,\thdop,\tfix");
                             foreach (var row in log.GetRows("GPS", flight.StartTime, flight.Duration))
                             {
                                 LogEntryGPS gps = new LogEntryGPS(row);
-                                Debug.WriteLine("{0},\t{1},\t{2},\t{3},\t\t{4:F2},\t{5},\t{6}", gps.GPSTime,  gps.Lat, gps.Lon, gps.nSat, gps.Alt, gps.EPH, gps.Fix);
+                                //Debug.WriteLine("{0},\t{1},\t{2},\t{3},\t\t{4:F2},\t{5},\t{6}", gps.GPSTime,  gps.Lat, gps.Lon, gps.nSat, gps.Alt, gps.EPH, gps.Fix);
                                 if (!(Math.Floor(gps.Lat) == 0 && Math.Floor(gps.Lon) == 0))
                                 {
-                                    var pos = new Location() { Altitude = gps.Alt, Latitude = gps.Lat, Longitude = gps.Lon };
+                                    // map doesn't like negative altitudes.
+                                    double alt = gps.Alt;
+                                    if (alt < 0)
+                                    {
+                                        alt = 0;
+                                    }
+                                    mapData.Add(gps);
+                                    mappedLogEntries.Add(row);
+                                    var pos = new Location() { Altitude = alt, Latitude = gps.Lat, Longitude = gps.Lon };
                                     points.Add(pos);
                                     ulong time = (ulong)gps.GPSTime;
                                     if (time != 0)
@@ -693,7 +857,7 @@ namespace LogViewer
                                             if (!gpsIsBad)
                                             {
                                                 gpsIsBad = true;
-                                                Debug.WriteLine("{0},\t{1},\t{2},\t{3},\t\t{4:F2},\t{5},\t{6}", gps.GPSTime, gps.Lat, gps.Lon, gps.nSat, gps.Alt, gps.EPH, gps.Fix);
+                                                //Debug.WriteLine("{0},\t{1},\t{2},\t{3},\t\t{4:F2},\t{5},\t{6}", gps.GPSTime, gps.Lat, gps.Lon, gps.nSat, gps.Alt, gps.EPH, gps.Fix);
                                                 Image img = new Image();
                                                 img.Width = 30;
                                                 img.Height = 30;
@@ -744,6 +908,31 @@ namespace LogViewer
 
         }
 
+        private LocationCollection GetBoundingBox(LocationCollection locations)
+        {
+            if (locations.Count == 0)
+            {
+                throw new Exception("Must provide at least one location");
+            }
+            Location first = locations.First();
+            double minLat = first.Latitude;
+            double maxLat = first.Latitude;
+            double minlong = first.Longitude;
+            double maxLong = first.Longitude;
+            foreach (Location i in locations)
+            {
+                minLat = Math.Min(minLat, i.Latitude);
+                maxLat = Math.Max(maxLat, i.Latitude);
+                minlong = Math.Min(minlong, i.Longitude);
+                maxLong = Math.Max(maxLong, i.Longitude);
+            }
+            var corners = new LocationCollection();
+            corners.Add(new Location(minLat, minlong));
+            corners.Add(new Location(minLat, minlong ));
+            corners.Add(new Location(minLat, minlong ));
+            corners.Add(new Location(minLat, minlong ));
+            return corners;
+        }
 
         private void UpdateButtons()
         {
@@ -767,8 +956,6 @@ namespace LogViewer
 
         IEnumerable<DataValue> GetSelectedDataValues(LogItemSchema schema)
         {
-            List<DataValue> combined = new List<DataValue>();
-
             List<Flight> selected = GetSelectedFlights();
             if (selected.Count == 0)
             {
@@ -784,13 +971,14 @@ namespace LogViewer
                     {
                         if (flight.Log == null || flight.Log == log)
                         {
-                            combined.AddRange(log.GetDataValues(schema, flight.StartTime, flight.Duration));
+                            foreach (var dv in log.GetDataValues(schema, flight.StartTime, flight.Duration))
+                            {
+                                yield return dv;
+                            }
                         }
                     }
                 }
-            }
-
-            return combined;
+            }            
         }
 
         Thickness defaultChartMargin = new Thickness(0, 10, 0, 10);
@@ -802,6 +990,71 @@ namespace LogViewer
 
         Random rand = new Random();
 
+        SimpleLineChart AddChart(LogItemSchema schema, IEnumerable<DataValue> values)
+        {
+            SimpleLineChart chart = new SimpleLineChart();
+            chart.ChartGenerated += OnNewChartGenerated;
+            chart.ClearAllAdornments += OnClearAllAdornments;
+            chart.DisplayMessage += OnShowMessage;
+            chart.PointerMoved += OnPointerMoved;
+            chart.Margin = defaultChartMargin;
+            chart.Focusable = false;
+            chart.Closed += OnChartClosed;
+            chart.LineColor = GetRandomColor();
+            chart.StrokeThickness = 1;
+            chart.Tag = schema;
+            InitializeChartData(schema, chart, values);
+            if (chart != null)
+            {
+                if (chartGroup != null)
+                {
+                    chartGroup.AddChart(chart);
+                    if (chartGroup.Parent == null)
+                    {
+                        ChartStack.AddChartGroup(chartGroup);
+                    }
+                }
+                else
+                {
+                    ChartStack.AddChart(chart);
+                }
+                LayoutCharts();
+            }
+            return chart;
+        }
+
+        private void OnPointerMoved(object sender, DataValue data)
+        {
+            if (data != null && mapData != null && myMap.Visibility == Visibility.Visible)
+            {
+                double time = data.X;
+                double dist = double.MaxValue; 
+                int closest = 0;
+                int i = 0;
+                LogEntryGPS gps = null;
+                // find matching gps location in time.
+                foreach (var item in mapData)
+                {
+                    double t = item.Timestamp;
+                    double d = Math.Abs((double)(t - time));
+                    if (dist == ulong.MaxValue || d < dist)
+                    {
+                        gps = item;
+                        dist = d;
+                        closest = i;
+                    }
+                    i++;
+                }
+                GetOrCreateMapMarker(new Location(gps.Lat, gps.Lon, gps.Alt));
+            }
+        }
+
+        private void OnShowMessage(object sender, string message)
+        {
+            SystemConsole.Write(message);
+            ConsoleButton.IsChecked = true;
+            SystemConsole.Show();
+        }
 
         private void GraphItem(LogItemSchema schema)
         {
@@ -809,24 +1062,21 @@ namespace LogViewer
             {
                 ChartStack.Visibility = Visibility.Visible;
                 ChartStack.UpdateLayout();
-                SimpleLineChart chart = new SimpleLineChart();
-                chart.Margin = defaultChartMargin;
-                chart.Focusable = false;
-                chart.Closed += OnChartClosed;
-                chart.LineColor = GetRandomColor();
-                chart.StrokeThickness = 1;
-                chart.Tag = schema;
+
+                SimpleLineChart chart = null;
 
                 if (currentFlightLog != null && schema.Root == currentFlightLog.Schema)
                 {
                     List<DataValue> values = new List<DataValue>(currentFlightLog.GetDataValues(schema, DateTime.MinValue, TimeSpan.MaxValue));
-                    InitializeChartData(schema, chart, values);
+                    chart = AddChart(schema, values);
 
-                    // now turn on live scrolling...
-                    chart.LiveScrolling = true;
-                    // the X values are in microseconds (s0 the numerator is the speed of scrolling).
-                    chart.LiveScrollingXScale = 50.0 / 1000000.0;
-
+                    if (!pauseRecording)
+                    {
+                        // now turn on live scrolling if we are recording...
+                        chart.LiveScrolling = true;
+                        // the X values are in microseconds (s0 the numerator is the speed of scrolling).
+                        chart.LiveScrollingXScale = 50.0 / 1000000.0;
+                    }
                     liveScrolling.Add(chart);
 
                     // now start watching the live update for new values that need to be added to this chart.
@@ -838,29 +1088,12 @@ namespace LogViewer
                 }
                 else
                 {
-                    List<DataValue> values = new List<DataValue>(GetSelectedDataValues(schema));
-                    if (values.Count > 0)
+                    var data = GetSelectedDataValues(schema);
+                    if (data.Count() > 0)
                     {
-                        InitializeChartData(schema, chart, values);
-                    }
-                    else
-                    {
-                        chart = null;
-                    }
-                    ShowStatus(string.Format("Found {0} data values", values.Count));
-                }
-
-                if (chart != null)
-                {
-                    if (chartGroup != null)
-                    {
-                        ChartStack.AddToGroup(chartGroup, chart);
-                    }
-                    else
-                    {
-                        ChartStack.AddChart(chart);
-                    }
-                    LayoutCharts();
+                        chart = AddChart(schema, data);
+                    }                                      
+                    ShowStatus(string.Format("Found {0} data values", data.Count()));
                 }
 
                 ConsoleButton.IsChecked = false;
@@ -869,23 +1102,206 @@ namespace LogViewer
             else
             {
                 StringBuilder sb = new StringBuilder();
+                string previous = null;
+                List<DataValue> unique = new List<Model.DataValue>();
                 foreach (var value in GetSelectedDataValues(schema))
                 {
-                    sb.AppendLine(value.Label);
+                    if (!string.IsNullOrEmpty(value.Label))
+                    {
+                        if (previous != value.Label)
+                        {
+                            unique.Add(value);
+                            sb.Append(((ulong)value.X).ToString());
+                            sb.Append(": ");
+                            sb.AppendLine(value.Label);
+                            previous = value.Label;
+                        }
+                    }
                 }
-
                 SystemConsole.Write(sb.ToString());
                 ConsoleButton.IsChecked = true;
                 SystemConsole.Show();
             }
         }
 
-        private void InitializeChartData(LogItemSchema schema, SimpleLineChart chart, List<DataValue> values)
+        private void AnnotateMap(LogItemSchema schema)
+        {
+            List<DataValue> unique = new List<Model.DataValue>();
+            if (schema.IsNumeric)
+            {
+                var data = GetSelectedDataValues(schema);
+                ShowStatus(string.Format("Found {0} data values", data.Count()));
+                if (data.Count() > 0)
+                {
+                    double previous = 0;
+                    {
+                        // uniquify it.
+                        foreach (var value in data)
+                        {
+                            if (value.Y != previous)
+                            {
+                                unique.Add(value);
+                                previous = value.Y;
+                            }
+                        }
+                    }
+                }
+            }
+            else
+            {
+                StringBuilder sb = new StringBuilder();
+                string previous = null;
+                foreach (var value in GetSelectedDataValues(schema))
+                {
+                    if (!string.IsNullOrEmpty(value.Label))
+                    {
+                        if (previous != value.Label)
+                        {
+                            unique.Add(value);
+                            sb.Append(value.X.ToString());
+                            sb.Append(": ");
+                            sb.AppendLine(value.Label);
+                            previous = value.Label;
+                        }
+                    }
+                }
+            }
+
+            // if there are too many values, then limit it to an even spread of 100 items.
+            if (unique.Count > 100)
+            {
+                var summary = new List<Model.DataValue>();
+                double skip = (unique.Count / 100);
+                for (int i = 0, n = unique.Count; i < n; i++)
+                {
+                    var value = unique[i];
+                    if (i >= summary.Count * unique.Count / 100)
+                    {
+                        summary.Add(value);
+                    }
+                }
+                unique = summary;
+            }
+            AnnotateMap(unique);
+        }
+
+        private void AnnotateMap(List<DataValue> unique)
+        {
+            if (this.mappedLogEntries == null || this.mappedLogEntries.Count == 0)
+            {
+                ShowMap();
+            }
+
+            if (this.mappedLogEntries == null || this.mappedLogEntries.Count == 0)
+            {
+                MessageBox.Show("Sorry, could not find GPS map info, so cannot annotate data on the map",
+                    "GPS info is missing", MessageBoxButton.OK, MessageBoxImage.Exclamation);
+                return;
+            }
+
+            if (annotationLayer != null)
+            {
+                myMap.Children.Remove(annotationLayer);
+            }
+            annotationLayer = new MapLayer();
+            
+            SolidColorBrush annotationBrush = new SolidColorBrush(Color.FromArgb(0x80, 0xff, 0xff, 0xB0));
+
+            foreach (var dv in unique)
+            {
+                LogEntry closest = null;
+                LogField field = dv.UserData as LogField;
+                if (field != null)
+                {
+                    // csv log
+                    LogEntry e = field.Parent;
+                    closest = FindNearestMappedItem(e.Timestamp);
+                }
+                else
+                {
+                    // px4 log?
+                    Message msg = dv.UserData as Message;
+                    if (msg != null)
+                    {
+                        closest = FindNearestMappedItem(msg.GetTimestamp());
+                    }
+                    else
+                    {
+                        // mavlink
+                        MavlinkLog.Message mavmsg = dv.UserData as MavlinkLog.Message;
+                        if (mavmsg != null)
+                        {
+                            closest = FindNearestMappedItem(mavmsg.Timestamp.Ticks / 10);
+                        }
+                    }
+                }
+
+                if (closest != null)
+                {
+                    LogEntryGPS gps = new LogEntryGPS(closest);
+                    // map doesn't like negative altitudes.
+                    double alt = gps.Alt;
+                    if (alt < 0)
+                    {
+                        alt = 0;
+                    }
+                    var pos = new Location() { Altitude = alt, Latitude = gps.Lat, Longitude = gps.Lon };
+                    string label = dv.Label;
+                    if (string.IsNullOrEmpty(label))
+                    {
+                        label = dv.Y.ToString();
+                    }
+                    annotationLayer.AddChild(new TextBlock(new Run(label) { Background = annotationBrush }), pos, PositionOrigin.BottomLeft);
+                }
+                
+            }
+            myMap.Children.Add(annotationLayer);
+
+            SystemConsole.Hide();
+            ChartStack.Visibility = Visibility.Collapsed;
+            myMap.Visibility = Visibility.Visible;
+            myMap.UpdateLayout();
+        }
+
+        private LogEntry FindNearestMappedItem(double t)
+        {
+            LogEntry closest = null;
+            double bestDiff = 0;
+            // find nearest mapped location (nearest in time).
+            foreach (var mapped in this.mappedLogEntries)
+            {
+                var time = mapped.Timestamp;
+                var diff = Math.Abs((double)time - t);
+
+                if (closest == null || diff < bestDiff)
+                {
+                    closest = mapped;
+                    bestDiff = diff;
+                }
+            }
+            return closest;
+        }
+
+        private void OnNewChartGenerated(object sender, List<DataValue> e)
+        {
+            SimpleLineChart chart = (SimpleLineChart)sender;
+            AddChart((LogItemSchema)chart.Tag, e);
+        }
+        
+        private void OnClearAllAdornments(object sender, EventArgs e)
+        {
+            foreach (var chart in ChartStack.FindCharts())
+            {
+                chart.ClearAdornments();
+            }
+        }
+        
+        private void InitializeChartData(LogItemSchema schema, SimpleLineChart chart, IEnumerable<DataValue> values)
         {
             chart.SetData(new Model.DataSeries()
             {
                 Name = schema.Name,
-                Values = values
+                Values = new List<DataValue>(values)
             });
         }
 
@@ -922,9 +1338,14 @@ namespace LogViewer
         private void LayoutCharts()
         {
             // layout charts to fill the space available.
+            ChartStack.UpdateLayout();
             double height = ChartStack.ActualHeight;
             double count = ChartStack.ChartCount;
             height -= (count * (defaultChartMargin.Top + defaultChartMargin.Bottom)); // remove margins
+            if (height < 0)
+            {
+                height = 0;
+            }
             double chartHeight = Math.Min(MaxChartHeight, height / count);
             bool found = false;
             foreach (FrameworkElement c in ChartStack.Charts)
@@ -934,20 +1355,27 @@ namespace LogViewer
             }
 
             // give all the charts the same min/max on the X dimension so that the charts are in sync (even when they are not grouped).
-            ChartScaleInfo combined = new ChartScaleInfo();
-            foreach (SimpleLineChart chart in ChartStack.FindCharts())
-            {
-                var info = chart.ComputeScaleSelf(0);
-                combined.Combine(info);
-            }
+            //ChartScaleInfo combined = null;
+            //foreach (SimpleLineChart chart in ChartStack.FindCharts())
+            //{
+            //    var info = chart.ComputeScaleSelf();
+            //    if (combined == null)
+            //    {
+            //        combined = info;
+            //    }
+            //    else
+            //    {
+            //        combined.Combine(info);
+            //    }
+            //}
 
-            // now set the min/max on each chart.
-            foreach (SimpleLineChart chart in ChartStack.FindCharts())
-            {
-                chart.FixMinimumX = combined.minX;
-                chart.FixMaximumX = combined.maxX;
-                chart.InvalidateArrange();
-            }
+            //// now set the min/max on each chart.
+            //foreach (SimpleLineChart chart in ChartStack.FindCharts())
+            //{
+            //    chart.FixMinimumX = combined.minX;
+            //    chart.FixMaximumX = combined.maxX;
+            //    chart.InvalidateArrange();
+            //}
 
             if (!found)
             {
@@ -990,6 +1418,7 @@ namespace LogViewer
             }
         }
 
+
         private void OnClear(object sender, RoutedEventArgs e)
         {
             ChartStack.ClearCharts();
@@ -1010,6 +1439,7 @@ namespace LogViewer
             myMap.Children.Clear();
             ImageViewer.Source = null;
             ShowSchema();
+            UpdateTitle("");
         }
 
         private void OnFlightSelected(object sender, SelectionChangedEventArgs e)
@@ -1033,15 +1463,7 @@ namespace LogViewer
                 }
             });
         }
-
-        //private void OnMapPointerMoved(object sender, PointerRoutedEventArgs e)
-        //{
-        //    Point mapPos = e.GetCurrentPoint(myMap).Position;
-        //    Geopoint location;
-        //    myMap.GetLocationFromOffset(mapPos, out location);
-        //    StatusText.Text = location.Position.Latitude + ", " + location.Position.Longitude;
-        //}
-
+        
         private void OnFlightViewKeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Delete)
@@ -1079,11 +1501,11 @@ namespace LogViewer
             // todo: remove the graphs...
         }
 
-        Grid chartGroup;
+        ChartGroup chartGroup;
 
         private void OnGroupChecked(object sender, RoutedEventArgs e)
         {
-            chartGroup = new Grid() { HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Stretch };
+            chartGroup = new ChartGroup() { HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Stretch };
         }
 
         private void OnGroupUnchecked(object sender, RoutedEventArgs e)
@@ -1099,13 +1521,7 @@ namespace LogViewer
         private void OnConnectorClick(object sender, MouseButtonEventArgs e)
         {
             ConnectionPanel.Start();
-            TranslateTransform transform = new TranslateTransform(300, 0);
-            ConnectionPanel.RenderTransform = transform;
-            transform.BeginAnimation(TranslateTransform.XProperty,
-                new DoubleAnimation(0, new Duration(TimeSpan.FromSeconds(0.2)))
-                {
-                    EasingFunction = new ExponentialEase() { EasingMode = EasingMode.EaseOut }
-                });
+            XamlExtensions.Flyout(ConnectionPanel);
         }
 
         private void OnOpenFileCommand(object sender, ExecutedRoutedEventArgs e)
@@ -1221,10 +1637,12 @@ namespace LogViewer
             public int width;             // Width of the image stream
             public int height;            // Width of the image stream
             public byte[] data;           // Buffer for the incoming bytestream
-            public long start;            // Time when we started recieving data
+            public long start;            // Time when we started receiving data
         };
 
         IncomingImage incoming_image = new IncomingImage();
+
+        public LogItemSchema rightClickedItem { get; private set; }
 
         private void OnShowConsole(object sender, RoutedEventArgs e)
         {
@@ -1251,7 +1669,137 @@ namespace LogViewer
             }
         }
 
-        #endregion 
+        #endregion
+
+        private void OnSettings(object sender, RoutedEventArgs e)
+        {
+            XamlExtensions.Flyout(AppSettingsPanel);
+        }
+
+        private void OnMapTest(object sender, RoutedEventArgs e)
+        {
+            Microsoft.Win32.OpenFileDialog fo = new Microsoft.Win32.OpenFileDialog();
+            fo.Filter = "CSV Files (*.csv)|*.csv";
+            fo.CheckFileExists = true;
+            fo.Multiselect = false;
+            if (fo.ShowDialog() == true)
+            {
+                LoadMapData(fo.FileName);
+            }
+        }
+
+        private void LoadMapData(string fileName)
+        {
+            // turn data into two lookup tables for easy access.
+            double[,] xmag  = new double[180,360];
+            double[,] ymag = new double[180, 360];
+
+            using (StreamReader reader = new StreamReader(fileName))
+            {
+                string line = reader.ReadLine();
+                while (line != null)
+                {
+                    string[] parts = line.Split('\t');
+                    if (parts.Length == 5)
+                    {
+                        double lat, lon, x, y;
+                        if (double.TryParse(parts[0], out lat))
+                        {
+                            lon = double.Parse(parts[1]);
+                            x = double.Parse(parts[2]);
+                            y = double.Parse(parts[3]);
+                            lat += 90;
+                            lon += 180;
+                            xmag[(int)lat, (int)lon] = x;
+                            ymag[(int)lat, (int)lon] = y;
+                        }
+                    }
+
+                    line = reader.ReadLine();
+                }
+            }
+
+            DrawVectors(xmag, ymag);
+        }
+
+        class LocationComparer : IEqualityComparer<Location>
+        {
+            public bool Equals(Location x, Location y)
+            {
+                return x.Altitude == y.Altitude && x.Latitude == y.Latitude && x.Longitude == y.Longitude;
+            }
+
+            public int GetHashCode(Location obj)
+            {
+                return (int)(obj.Altitude + obj.Latitude + obj.Longitude);
+            }
+        }
+
+        private void DrawVectors(double[,] xmag, double[,] ymag)
+        {
+            // find guassian lines in the map and draw them so it looks like this:
+            // https://www.ngdc.noaa.gov/geomag/WMM/data/WMM2015/WMM2015_D_MERC.pdf
+
+            for (int i = 0; i < 180; i++)
+            {
+                for (int j = 0; j < 360; j++)
+                {
+                    double x = xmag[i, j];
+                    double y = ymag[i, j];
+
+                    double latitude = i - 90;
+                    double longitude = j - 180;
+
+                    MapPolyline line = new MapPolyline();
+                    line.StrokeThickness = 1;
+                    line.Stroke = new SolidColorBrush(Colors.Red);
+                    LocationCollection points = new LocationCollection();
+                    Location pos = new Location() { Altitude = 0, Latitude = latitude, Longitude = longitude };
+                    points.Add(pos);
+
+                    // ok, we have a winner, pick this one and continue.
+                    pos = new Location() { Latitude = latitude + (x*2), Longitude = longitude + (y*2) };
+                    points.Add(pos);
+                    line.Locations = points;
+                    myMap.Children.Add(line);
+                }
+            }
+        }
+
+        private void OnPaste(object sender, ExecutedRoutedEventArgs e)
+        {
+            if (Clipboard.ContainsImage())
+            {
+                var image = Clipboard.GetImage();
+                ImageViewer.Source = image;
+                CameraPanel.Visibility = Visibility.Visible;
+            }
+        }
+
+        private void OnAnnotateItem(object sender, RoutedEventArgs e)
+        {
+            LogItemSchema item = this.rightClickedItem;
+            if (item != null)
+            {
+                AnnotateMap(item);
+            }
+        }
+
+        private void OnRightClickCategoryList(object sender, MouseButtonEventArgs e)
+        {
+            this.rightClickedItem = null;
+            Point pos = e.GetPosition(CategoryList);
+            DependencyObject dep = (DependencyObject)e.OriginalSource;
+            while ((dep != null) && !(dep is ListViewItem))
+            {
+                dep = VisualTreeHelper.GetParent(dep);
+            }
+            if (dep == null)
+                return;
+            ListViewItem listitem = (ListViewItem)dep;
+            LogItemSchema item = listitem.DataContext as LogItemSchema;
+            this.rightClickedItem = item;
+        }
     }
 }
 

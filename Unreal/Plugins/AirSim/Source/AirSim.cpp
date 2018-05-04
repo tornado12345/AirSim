@@ -1,4 +1,8 @@
+// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License.
+
 #include "AirSim.h"
+#include "Misc/Paths.h"
 
 DEFINE_LOG_CATEGORY(LogAirSim);
 
@@ -12,8 +16,11 @@ IMPLEMENT_MODULE(FAirSim, AirSim)
 
 void FAirSim::StartupModule()
 {
+    //plugin startup
+    UE_LOG(LogAirSim, Log, TEXT("StartupModule: AirSim plugin"));
 }
 
 void FAirSim::ShutdownModule()
 {
+    //plugin shutdown
 }
